@@ -11,7 +11,7 @@ metadata:
 
 # ux-discover
 
-Defines **what good looks like for this product**, independent of technology. Everything else in ux-kit is measured against it. It never touches backlog items or code.
+Defines **what good looks like for this product**, independent of technology. Everything else in ux-kit is measured against it. It does not change backlog items or code by itself: after the impact report it only offers next steps, and acts on them only after an explicit yes.
 
 Requires `.ux/` (if missing, run ux-init first — say so in one line). Write the documents in `config.yaml → project.language`.
 

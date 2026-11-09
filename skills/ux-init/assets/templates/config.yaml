@@ -32,7 +32,7 @@ severity: {}             # configurable rule ids from knowledge/severity.md, e.g
 
 check:
   after_change: true     # ux-guide asks the agent to run ux-check when it finishes a UI change
-  base_ref: HEAD         # git reference to compare against
+  base_ref: HEAD         # git reference to compare against (HEAD = uncommitted work; before a PR use git merge-base <default-branch> HEAD)
   include: []            # globs; empty = whole repo
   exclude: ["**/*.test.*", "**/*.spec.*", "**/generated/**"]
 

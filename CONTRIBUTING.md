@@ -19,6 +19,12 @@ Thanks for helping! ux-kit aims to be useful for any agent, any methodology and 
 
 ## Testing scripts
 ```bash
+node --test tests/scripts.test.mjs
+```
+Run it before and after changing a script. If a scanner change is intended, update `tests/expected/monorepo-scan.json` and say why in the PR.
+
+To look at the output by hand:
+```bash
 node skills/ux-init/assets/scripts/detect.mjs tests/fixtures/monorepo --md
 node skills/ux-init/assets/scripts/scan.mjs tests/fixtures/monorepo --platform mobile
 node skills/ux-init/assets/scripts/tokens.mjs skills/ux-init/assets/templates/standard/tokens.json

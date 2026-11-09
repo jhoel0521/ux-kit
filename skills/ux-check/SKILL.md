@@ -13,21 +13,26 @@ metadata:
 
 Fast and cheap by design: review only what changed, load only the knowledge needed.
 
+## 0. If `.ux/` is missing or you cannot write
+- **No `.ux/`**: the scripts, knowledge and standard are not available. Say once, in one line, that `ux-init` would add them. Then review the diff (`git diff`, or ask for the files) following step 3 with these defaults: targets ≥ 24×24 CSS px (touch: 44pt iOS, 48dp Android), contrast 4.5:1 for text and 3:1 for large text and UI parts, accessible names, visible focus, all states, no literal design values. Classify as blocker (WCAG A/AA failure with real impact, data loss, dark pattern), major or minor. Show the report in the chat and offer to save it.
+- **Read-only session** (plan mode, read-only sandbox): do not update `config.yaml` or save the report. Show the proposed fact changes and the report in the chat.
+
 ## 1. What to review
-- Default: changed UI files since `config.yaml → check.base_ref` (default `HEAD`), plus untracked files:
+- Default: changed UI files since `config.yaml → check.base_ref` (default `HEAD`, which only sees uncommitted work), plus untracked files:
   ```bash
-  node .ux/scripts/scan.mjs --list-changed [base_ref]
+  node .ux/scripts/scan.mjs --list-changed [base_ref] [--include <glob>]… [--exclude <glob>]…
   ```
-  Apply `check.include` / `check.exclude`. The list excludes data/config files (.json, .yaml) and general-purpose languages; add files explicitly when they contain UI code (e.g. a Python Qt/Tkinter view). If there is no git, ask for the list of files (or a path).
+- **Before a PR, or when the work is already committed**, `HEAD` finds nothing. Run `git merge-base <default-branch> HEAD` and use the resulting commit as `base_ref` here and in step 2.
+- Pass each `check.include` as `--include` and each `check.exclude` as `--exclude` (globs relative to the repo root). The list excludes data/config files (.json, .yaml) and general-purpose languages; add files explicitly when they contain UI code (e.g. a Python Qt/Tkinter view). If there is no git, ask for the list of files (or a path).
 - If the user gives a path, review that path instead.
 - Map each file to its app (`config.yaml → apps`) to know platforms, users and overrides. If a file's stack differs from the config, update the fact and say so in one line.
 
 ## 2. Scan what the scanner covers
 ```bash
-node .ux/scripts/scan.mjs --changed [base_ref] --platform <web|mobile|desktop> --json
+node .ux/scripts/scan.mjs --changed [base_ref] [app-paths…] --platform <web|mobile|desktop> [--include <glob>]… [--exclude <glob>]… --json
 ```
 (or `node .ux/scripts/scan.mjs <paths> …` for an explicit path). Run from the repo root so paths are repo-relative.
-- `--platform` only tunes touch-target severity. Use `mobile` if the app's platforms include android or ios, otherwise `web` if they include web, otherwise `desktop`. In monorepos with different apps changed, run once per group.
+- `--platform` only tunes touch-target severity. Use `mobile` if the app's platforms include android or ios, otherwise `web` if they include web, otherwise `desktop`. In monorepos with different apps changed, run once per group and pass that group's app paths (e.g. `--changed HEAD apps/web --platform web`).
 - In `--changed` mode only findings on **changed lines** are shown; the scanner reports how many pre-existing findings it hid. Put that number in the report (not the items) and suggest a full `ux-check <path>` baseline if it is high. Use `--all-lines` only if the user asks.
 - Every result is a **candidate**: open the code and confirm, reclassify or discard it. Final severity comes from `severity.md` + `config.yaml`, not from the scanner.
 

@@ -1,0 +1,4 @@
+<Grid>
+  <Button Click="save">Save</Button>
+  <Button Click="add"><TextBlock Text="Add"/></Button>
+</Grid>

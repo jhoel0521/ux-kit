@@ -16,6 +16,8 @@ Reviews **what is about to be built**, when fixing it is cheapest. Informs and a
 ## 1. Find the plan
 The plan the user points to, or the most recent one in the conversation or working tree (e.g. `openspec/changes/<name>/` proposal + design + tasks + spec deltas, a plan file, a task list). If several candidates exist, ask which one. Read `.ux/config.yaml`, the relevant parts of `.ux/standard/` and `.ux/knowledge/severity.md`.
 
+If `.ux/` does not exist, say once, in one line, that `ux-init` would add the project's standard, and review with general criteria, skipping the file references below. Classify as blocker (WCAG A/AA failure with real impact, data loss, dark pattern), major or minor, and show the review in the chat instead of saving it.
+
 ## 2. Review against these points
 For each point, decide: covered ✅ · missing or weak (with severity) · not applicable.
 1. **Users and context** — does the plan say who uses it and where (from `users.md`)? Does the design fit that context?
@@ -35,3 +37,5 @@ Check laws only to justify gaps; never request changes based on myths (`myths.md
 Write findings with prefix `PLAN-` in the format of `severity.md`, most important first, each with a concrete addition to the plan (the sentence or task to add). Then ask: **"Do you want me to add these to the plan?"** (all, some by ID, or none).
 - Yes → edit the plan files in place, keeping their format (e.g. add requirements/scenarios to an OpenSpec spec delta, tasks to `tasks.md`, a section to `design.md`). Do not touch code.
 - No → leave the plan as is. Save the review to `.ux/reports/YYYY-MM-DD-ux-plan-review-<name>.md` either way.
+
+In a read-only session (plan mode, read-only sandbox) do not edit files: show the text to add and the review in the chat.

@@ -6,7 +6,7 @@
 // with tauri, *.pro) becomes an "app" candidate. Output feeds the `apps:` section of .ux/config.yaml.
 // Read-only: never executes project code.
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, relative, basename, extname, dirname } from 'node:path';
+import { join, relative, basename, extname, dirname, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'vendor', 'Pods', '.gradle', 'target',
@@ -114,7 +114,11 @@ function analyzeManifest(file) {
 const MANIFEST = (b) => ['package.json', 'composer.json', 'build.gradle', 'build.gradle.kts', 'pubspec.yaml', 'Package.swift',
   'pom.xml', 'CMakeLists.txt', 'Cargo.toml'].includes(b) || b.endsWith('.csproj') || b.endsWith('.pro') || b.endsWith('.xcodeproj');
 
-export function detect(root) {
+// Paths written to .ux/config.yaml use "/" on every OS so the file is portable.
+const portable = (p) => p.split(sep).join('/');
+
+export function detect(rootArg) {
+  const root = resolve(rootArg); // absolute, so "." and "./" behave like any other root
   const files = walk(root);
   const apps = new Map();
   const ensure = (dir) => { if (!apps.has(dir)) apps.set(dir, { framework: new Set(), ui: new Set(), styling: new Set(), charts: new Set(),
@@ -133,7 +137,7 @@ export function detect(root) {
   for (const f of files) {
     const d = owner(f); if (!d) continue; const a = apps.get(d); const ext = extname(f).toLowerCase();
     if (ext) a.exts[ext] = (a.exts[ext] || 0) + 1;
-    if (THEME_RE.test(f) && a.themes.length < 15) a.themes.push(relative(root, f));
+    if (THEME_RE.test(f) && a.themes.length < 15) a.themes.push(portable(relative(root, f)));
     if (ext === '.swift' && !a.framework.has('swiftui')) { const t = read(f, 20000); if (t.includes('import SwiftUI')) a.framework.add('swiftui'); else if (t.includes('import UIKit')) a.framework.add('uikit'); else if (t.includes('import AppKit')) { a.framework.add('appkit'); a.platforms.add('macos'); } }
     if (ext === '.xml' && /[\/\\]res[\/\\]layout[^\/\\]*[\/\\]/.test(f)) a.framework.add('android-views');
     if (ext === '.java' && !a.framework.has('swing') && /import javax\.swing/.test(read(f, 20000))) { a.framework.add('swing'); a.platforms.add('desktop'); }
@@ -143,13 +147,13 @@ export function detect(root) {
   // drop root "app" that is only a workspace wrapper (no framework) when children exist
   const list = [...apps.entries()].filter(([d, a]) => a.framework.size || a.platforms.size || dirs.length === 1)
     .map(([d, a]) => ({
-      name: d === root ? basename(root) : basename(d), path: relative(root, d) || '.',
+      name: basename(d), path: portable(relative(root, d)) || '.',
       stack: [...a.framework, ...a.ui, ...a.styling].join(' + ') || 'unknown',
       platforms: [...a.platforms].sort(), charts: [...a.charts], motion: [...a.motion], a11yTooling: [...a.a11y],
       tooling: [...a.tooling], themeCandidates: a.themes,
       topExtensions: Object.fromEntries(Object.entries(a.exts).sort((x, y) => y[1] - x[1]).slice(0, 8)),
     })).sort((x, y) => x.path.localeCompare(y.path));
-  return { root, monorepo: list.length > 1, apps: list,
+  return { root: rootArg, monorepo: list.length > 1, apps: list,
     hasUx: existsSync(join(root, '.ux', 'config.yaml')), hasStandardTokens: existsSync(join(root, '.ux', 'standard', 'tokens.json')),
     hasGit: existsSync(join(root, '.git')) };
 }

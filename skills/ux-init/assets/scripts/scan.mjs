@@ -2,17 +2,20 @@
 // ux-kit · scan.mjs — static UX/UI scan across stacks (pattern-based, no dependencies).
 // Usage:
 //   node scan.mjs <paths...> [--json] [--platform web|mobile|desktop] [--fail-on blocker|major] [--max-per-rule 8]
-//   node scan.mjs --changed [git-ref]   scan visual files changed vs ref (default HEAD, plus untracked); only findings
-//                                       on changed lines are shown (--all-lines to include pre-existing ones)
-//   node scan.mjs --list-changed [ref]  only print the changed visual files (any language), one per line
+//   node scan.mjs --changed [git-ref] [paths...]   scan visual files changed vs ref (default HEAD, plus untracked), only
+//                                       inside paths when given; only findings on changed lines are shown
+//                                       (--all-lines to include pre-existing ones)
+//   node scan.mjs --list-changed [ref] [paths...]  only print the changed visual files (any language), one per line
+//   Any mode: --include <glob> / --exclude <glob> (repeatable, relative to the current directory; exclude wins).
+//   An argument after --changed that is both a ref and a path is an error: write ./name (path) or refs/heads/name (ref).
 // Covers HTML, JSX/TSX, Vue, Svelte, Astro, Blade/Twig/Razor/JSP, CSS/SCSS, Jetpack Compose (.kt), Android XML,
 // SwiftUI (.swift), Flutter (.dart), React Native, XAML, QML, Java Swing/JavaFX.
 // IMPORTANT: every finding is a CANDIDATE to confirm by reading the code. Severities are provisional
 // (see knowledge/severity.md). Other languages: the agent reviews them using knowledge/stacks/.
 // Exit code: 0, or 1 when findings at --fail-on level exist (for CI).
-import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, relative, extname, basename, resolve, dirname } from 'node:path';
-import { execSync } from 'node:child_process';
+import { readdirSync, readFileSync, statSync, existsSync, realpathSync } from 'node:fs';
+import { join, relative, extname, basename, resolve, dirname, sep } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'vendor', 'Pods', '.gradle', 'target',
@@ -41,6 +44,37 @@ const INTERACTIVE = new Set(['button', 'a', 'Button', 'IconButton', 'Link', 'Nav
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const attr = (a, n) => { const m = a.match(new RegExp(`(?:^|\\s)${esc(n)}\\s*=\\s*("[^"]*"|'[^']*'|\\{(?:[^{}]|\\{[^{}]*\\})*\\})`, 's')); return m ? m[1].slice(1, -1) : null; };
 const has = (a, ...ns) => ns.some((n) => new RegExp(`(?:^|\\s)${esc(n)}(\\s*=|\\s|$|/)`).test(a));
+const SPREAD = /\{\s*\.\.\./; // JSX spread: alt, id or aria-label may arrive through it, so the finding needs checking
+
+// Name of the call whose argument list contains offset i (e.g. "Icon" for a Modifier passed to Icon(...)).
+function enclosingCall(t, i) {
+  let depth = 0;
+  for (let k = i - 1; k >= 0; k--) {
+    if (t[k] === ')') depth++;
+    else if (t[k] === '(') { if (depth === 0) { const m = t.slice(Math.max(0, k - 40), k).match(/([A-Za-z_]\w*)\s*$/); return m ? m[1] : null; } depth--; }
+  }
+  return null;
+}
+
+function globToRe(glob) {
+  const g = glob.replace(/\\/g, '/').replace(/^\.\//, ''); let s = '';
+  for (let i = 0; i < g.length;) {
+    if (g.startsWith('**/', i)) { s += '(?:.*/)?'; i += 3; }
+    else if (g.startsWith('/**', i) && i + 3 === g.length) { s += '(?:/.*)?'; i += 3; }
+    else if (g.startsWith('**', i)) { s += '.*'; i += 2; }
+    else if (g[i] === '*') { s += '[^/]*'; i++; }
+    else if (g[i] === '?') { s += '[^/]'; i++; }
+    else if (g[i] === '{' && g.indexOf('}', i) > i) { const e = g.indexOf('}', i); s += `(?:${g.slice(i + 1, e).split(',').map(esc).join('|')})`; i = e + 1; }
+    else { s += esc(g[i]); i++; }
+  }
+  return new RegExp(`^${s}$`);
+}
+
+const cwdRel = (abs) => relative(process.cwd(), abs).split(sep).join('/');
+function makeFileFilter(include, exclude) {
+  const inc = include.map(globToRe), exc = exclude.map(globToRe);
+  return (abs) => { const r = cwdRel(abs); return (!inc.length || inc.some((x) => x.test(r))) && !exc.some((x) => x.test(r)); };
+}
 
 function auditWeb(path, text, ctx, out) {
   const rel = ctx.rel(path); const ext = extname(path).toLowerCase(); const markup = WEB.has(ext);
@@ -49,9 +83,11 @@ function auditWeb(path, text, ctx, out) {
     if (/user-scalable\s*=\s*(no|0)|maximum-scale\s*=\s*1(\.0)?\b/i.test(m[0])) F('WEB-ZOOM', 'blocker', m.index, 'Viewport blocks zoom', 'WCAG 1.4.4');
   for (const m of text.matchAll(/<html\b([^>]*)>/gi)) if (!/\blang\s*=/.test(m[1])) F('WEB-LANG', 'major', m.index, '<html> without lang', 'WCAG 3.1.1');
   if (CSS.has(ext) || text.includes('<style')) {
-    const hasFocus = /:focus(-visible)?/.test(text);
+    // a :focus rule only counts when it draws something; `:focus{outline:none}` alone is the problem, not the fix
+    const hasFocus = [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some((r) => /:focus/.test(r[1]) &&
+      /outline(?:-width|-style|-color)?\s*:(?!\s*(?:none|0)\b)|box-shadow\s*:(?!\s*none\b)|border(?:-\w+)?\s*:(?!\s*(?:none|0)\b)|background(?:-color)?\s*:|text-decoration\s*:(?!\s*none\b)/.test(r[2]));
     for (const m of text.matchAll(/outline\s*:\s*(none|0)\b/g))
-      F('WEB-FOCUS', hasFocus ? 'minor' : 'blocker', m.index, hasFocus ? 'Outline removed; verify :focus-visible replaces it with ≥3:1' : 'Outline removed and no :focus/:focus-visible styles in this file', 'WCAG 2.4.7');
+      F('WEB-FOCUS', hasFocus ? 'minor' : 'blocker', m.index, hasFocus ? 'Outline removed; verify the :focus/:focus-visible style replaces it with ≥3:1' : 'Outline removed and no visible :focus/:focus-visible replacement in this file', 'WCAG 2.4.7');
     for (const m of text.matchAll(/font-size\s*:\s*(\d+(?:\.\d+)?)px/g)) if (+m[1] < 12) F('WEB-FONT-SMALL', 'minor', m.index, `Text ${m[1]}px (<12px)`, 'Legibility');
     for (const m of text.matchAll(/z-index\s*:\s*(\d{4,})/g)) F('WEB-ZINDEX', 'minor', m.index, `z-index ${m[1]}: use layer tokens`, 'Visual system');
     if (!isTokenFile(path)) for (const m of text.matchAll(/(?:^|[;{\s])((?:background-)?color|border(?:-color)?|fill|stroke)\s*:\s*[^;}]*?(#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))/g))
@@ -60,7 +96,10 @@ function auditWeb(path, text, ctx, out) {
   if (!markup) return;
   const labelFor = new Set([...text.matchAll(/<label\b[^>]*?\b(?:for|htmlFor|:for)\s*=\s*["'{]([^"'}]+)/g)].map((m) => m[1]));
   for (const m of text.matchAll(/<button\b((?:[^>"']|"[^"]*"|'[^']*')*)>(\s*(?:<svg\b[\s\S]*?<\/svg>|<[A-Z]\w*(?:\s[^>]*)?\/>|<i\b[^>]*>\s*<\/i>|<span\b[^>]*class=["'][^"']*(?:icon|material-symbols)[^"']*["'][^>]*>[^<]{0,40}<\/span>)?\s*)<\/button>/g))
-    if (!/aria-label|aria-labelledby|\btitle\s*=|ariaLabel/.test(m[1])) F('WEB-ICON-NAME', 'blocker', m.index, '<button> empty or icon-only without aria-label', 'WCAG 4.1.2');
+    if (!/aria-label|aria-labelledby|\btitle\s*=|ariaLabel/.test(m[1])) {
+      const maybeNamed = SPREAD.test(m[1]) || /\b(?:title|aria-label|aria-labelledby)\s*=|<title\b/.test(m[2]);
+      F('WEB-ICON-NAME', maybeNamed ? 'minor' : 'blocker', m.index, maybeNamed ? '<button> icon-only: verify the accessible name arriving through props or the icon' : '<button> empty or icon-only without aria-label', 'WCAG 4.1.2');
+    }
   for (const m of text.matchAll(/<(button|a|[A-Z]\w*Button|div|span)\b[^>]*style\s*=\s*["']([^"']*)["'][^>]*>/g)) {
     const hw = [...m[2].matchAll(/(?:^|;|\s)(?:width|height)\s*:\s*(\d+(?:\.\d+)?)px/g)].map((x) => +x[1]);
     if (hw.length && Math.min(...hw) < 24 && (['button', 'a'].includes(m[1]) || m[1].endsWith('Button') || /onclick/i.test(m[0])))
@@ -69,7 +108,7 @@ function auditWeb(path, text, ctx, out) {
   for (const m of text.matchAll(TAG)) {
     const tag = m[1], a = m[2], tl = tag.toLowerCase(); const cls = attr(a, 'className') || attr(a, 'class') || '';
     if (tl === 'img' || (tag === 'Image' && has(a, 'src'))) {
-      if (!has(a, 'alt', ':alt', 'v-bind:alt', '[alt]')) F('WEB-IMG-ALT', 'blocker', m.index, `<${tag}> without alt (use alt="" if decorative)`, 'WCAG 1.1.1');
+      if (!has(a, 'alt', ':alt', 'v-bind:alt', '[alt]')) F('WEB-IMG-ALT', SPREAD.test(a) ? 'minor' : 'blocker', m.index, SPREAD.test(a) ? `<${tag}> with spread props: verify alt is passed` : `<${tag}> without alt (use alt="" if decorative)`, 'WCAG 1.1.1');
       if (tl === 'img' && !(has(a, 'width') && has(a, 'height')) && !cls.includes('aspect-')) F('WEB-IMG-DIM', 'suggestion', m.index, '<img> without width/height: possible CLS', 'Core Web Vitals');
     }
     if (['div', 'span', 'li', 'td', 'tr', 'p', 'img', 'section', 'article', 'label'].includes(tl) &&
@@ -83,7 +122,11 @@ function auditWeb(path, text, ctx, out) {
       F('WEB-FOCUS-TW', ['button', 'a', 'input', 'select', 'textarea'].includes(tl) || INTERACTIVE.has(tag) ? 'blocker' : 'major', m.index, 'outline-none without focus-visible:ring/outline replacement', 'WCAG 2.4.7');
     const interactive = INTERACTIVE.has(tag) || INTERACTIVE.has(tl) || ['button', 'link', 'tab', 'checkbox', 'switch', 'menuitem'].includes(attr(a, 'role')) || has(a, 'onClick', '@click', '(click)', 'on:click');
     if (interactive && cls && tl !== 'a') {
-      const dims = [...cls.matchAll(/(?:^|\s)(?:h|w|size|min-h|min-w)-(\d+(?:\.5)?)\b/g)].map((x) => TW[x[1]]).filter(Boolean);
+      const tw = (p) => { const v = [...cls.matchAll(new RegExp(`(?:^|\\s)${p}-(\\d+(?:\\.5)?)\\b`, 'g'))].map((x) => TW[x[1]]).filter(Boolean); return v.length ? v[v.length - 1] : null; };
+      const twMin = (p) => { const x = cls.match(new RegExp(`(?:^|\\s)min-${p}-\\[(\\d+(?:\\.\\d+)?)(px|rem)\\]`)); return x ? +x[1] * (x[2] === 'rem' ? 16 : 1) : tw(`min-${p}`); };
+      // on each axis the rendered size is the larger of the fixed size and its min-* (a min-h-[44px] wins over h-5)
+      const axis = (p) => { const fixed = tw(p) ?? tw('size'), min = twMin(p); return fixed == null && min == null ? null : Math.max(fixed ?? 0, min ?? 0); };
+      const dims = [axis('h'), axis('w')].filter((x) => x != null);
       const pad = /(?:^|\s)(?:p|py|px|pt|pb)-(?:[2-9]|1[0-9])\b/.test(cls);
       if (dims.length && !pad && !/before:|after:/.test(cls)) {
         const s = Math.min(...dims);
@@ -93,7 +136,7 @@ function auditWeb(path, text, ctx, out) {
     }
     if (tag === 'IconButton' || ((tl === 'button' || tag === 'Button') && /size\s*=\s*["']icon/.test(a)))
       if (!has(a, 'aria-label', 'aria-labelledby', 'title', 'ariaLabel', ':aria-label', '[attr.aria-label]'))
-        F('WEB-ICON-NAME', 'major', m.index, `<${tag}> icon button without aria-label (verify sr-only text)`, 'WCAG 4.1.2');
+        F('WEB-ICON-NAME', SPREAD.test(a) ? 'minor' : 'major', m.index, `<${tag}> icon button without aria-label (verify sr-only text${SPREAD.test(a) ? ' or spread props' : ''})`, 'WCAG 4.1.2');
     if (['input', 'textarea', 'select'].includes(tl)) {
       const typ = (attr(a, 'type') || 'text').toLowerCase();
       if (!['hidden', 'submit', 'button', 'reset', 'image'].includes(typ)) {
@@ -103,8 +146,8 @@ function auditWeb(path, text, ctx, out) {
           if (idv && !labelFor.has(idv) && !has(a, 'aria-label', 'aria-labelledby', 'title') && !['checkbox', 'radio'].includes(typ) && !idv.includes('{'))
             F('WEB-INPUT-LABEL', 'major', m.index, `Field id="${idv}" without <label for> in this file (verify if label is elsewhere)`, 'WCAG 1.3.1 / 3.3.2');
           else if (!has(a, 'id', 'aria-label', 'aria-labelledby', 'title', ':id', '[id]', 'v-bind:id')) {
-            const ph = has(a, 'placeholder');
-            F('WEB-INPUT-LABEL', ph ? 'blocker' : 'major', m.index, 'Field without associated label' + (ph ? ' (placeholder used as label)' : ''), 'WCAG 1.3.1 / 3.3.2 / 4.1.2');
+            const ph = has(a, 'placeholder'), sp = SPREAD.test(a);
+            F('WEB-INPUT-LABEL', sp ? 'minor' : ph ? 'blocker' : 'major', m.index, sp ? 'Field with spread props: verify it receives an id or aria-label and has a label' : 'Field without associated label' + (ph ? ' (placeholder used as label)' : ''), 'WCAG 1.3.1 / 3.3.2 / 4.1.2');
           }
         }
         const nm = `${attr(a, 'name') || ''} ${idv || ''}`.toLowerCase();
@@ -152,13 +195,20 @@ function auditKotlin(path, text, ctx, out) {
     const i = i0 + 1;
     for (const m of ln.matchAll(/\.(?:size|height|width|requiredSize)\((\d+(?:\.\d+)?)\.dp\)/g)) {
       const v = +m[1]; if (v >= 48) continue;
+      // the size of an Icon/Image is not a touch target (an IconButton keeps its own 48dp) unless the Icon itself is clickable
+      const call = enclosingCall(text, lines.slice(0, i0).join('\n').length + (i0 ? 1 : 0) + m.index);
+      if (call === 'Icon' || call === 'Image') {
+        let chain = ln.slice(m.index);
+        for (let k = i0 + 1; k < lines.length && lines[k].trim().startsWith('.'); k++) chain += lines[k];
+        if (!/\.(?:clickable|toggleable|selectable|combinedClickable)\b/.test(chain)) continue;
+      }
       const w = lines.slice(Math.max(0, i - 4), i + 3).join('\n');
       if (/\.clickable|\.toggleable|\.selectable|onClick\s*=|IconButton|\.combinedClickable/.test(w) && !/minimumInteractiveComponentSize|\.padding\(/.test(w))
         F('CMP-TARGET', v < 24 ? 'blocker' : 'major', i, `Clickable element ${v}dp (<48dp) without minimumInteractiveComponentSize()`, 'touch-target-platform / Fitts');
     }
     if (/\.clickable\s*\{/.test(ln) && !/role|onClickLabel/.test(ln)) F('CMP-CLICK-ROLE', 'minor', i, '.clickable without role/onClickLabel', 'WCAG 4.1.2');
   });
-  for (const m of text.matchAll(/IconButton\s*\([^)]*\)\s*\{\s*Icon\s*\((?:[^()]|\([^()]*\))*contentDescription\s*=\s*null/gs))
+  for (const m of text.matchAll(/IconButton\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\s*\{\s*Icon\s*\((?:[^()]|\([^()]*\))*contentDescription\s*=\s*null/gs))
     F('CMP-ICON-NAME', 'blocker', lineOf(text, m.index), 'IconButton whose Icon has contentDescription = null', 'WCAG 4.1.2');
 }
 
@@ -183,8 +233,12 @@ function auditSwift(path, text, ctx, out) {
     const i = i0 + 1;
     const m = ln.match(/\.frame\(\s*(?:min)?[wW]idth:\s*(\d+(?:\.\d+)?)\s*,\s*(?:min)?[hH]eight:\s*(\d+(?:\.\d+)?)/);
     if (m) { const v = Math.min(+m[1], +m[2]); const w = lines.slice(Math.max(0, i - 6), i + 3).join('\n');
-      if (v < 44 && /Button\s*[({]|\.onTapGesture|Toggle\(|NavigationLink/.test(w) && !w.includes('contentShape'))
-        F('SWU-TARGET', v < 24 ? 'blocker' : 'major', i, `Control ${v}pt (<44pt) without contentShape/padding`, 'touch-target-platform / HIG'); }
+      // padding only enlarges the tap area inside the Button's label; on the Button itself it does not
+      const upTo = `${lines.slice(Math.max(0, i0 - 6), i0).join('\n')}\n${ln.slice(0, m.index)}`, btn = upTo.lastIndexOf('Button');
+      const head = btn < 0 ? '' : upTo.slice(btn), inLabel = (head.match(/\{/g) || []).length > (head.match(/\}/g) || []).length;
+      const paddedInLabel = inLabel && [ln.slice(m.index + m[0].length), ...lines.slice(i, i + 3)].join('\n').split('}')[0].includes('.padding');
+      if (v < 44 && /Button\s*[({]|\.onTapGesture|Toggle\(|NavigationLink/.test(w) && !w.includes('contentShape') && !paddedInLabel)
+        F('SWU-TARGET', v < 24 ? 'blocker' : 'major', i, `Control ${v}pt (<44pt): no contentShape or padding inside the label`, 'touch-target-platform / HIG'); }
     if (ln.includes('.onTapGesture') && !lines.slice(Math.max(0, i - 3), i + 3).join('\n').includes('accessibilityAddTraits'))
       F('SWU-TAP-GESTURE', 'minor', i, 'onTapGesture instead of Button: not announced as a button', 'WCAG 4.1.2');
     if (/\.font\(\s*\.system\(\s*size:/.test(ln) && !ln.includes('relativeTo')) F('SWU-FIXED-FONT', 'major', i, 'Fixed font size: ignores Dynamic Type', 'WCAG 1.4.4');
@@ -192,8 +246,11 @@ function auditSwift(path, text, ctx, out) {
     if (/\.glassEffect\(|\.ultraThinMaterial|\.thinMaterial/.test(ln) && !text.includes('accessibilityReduceTransparency'))
       F('SWU-GLASS', 'minor', i, 'Translucent material: verify contrast and honor Reduce Transparency', 'WCAG 1.4.3 / Liquid Glass');
   });
-  for (const m of text.matchAll(/Button\s*(?:\(action:[^)]*\))?\s*\{\s*Image\(systemName:[^)]*\)\s*\}/gs))
-    if (!text.slice(m.index + m[0].length, m.index + m[0].length + 250).includes('accessibilityLabel'))
+  const IMG = String.raw`Image\(systemName:[^)]*\)(?:\s*\.\w+(?:\((?:[^()]|\([^()]*\))*\))?)*`;
+  const ARGS = String.raw`\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)`, BODY = String.raw`(?:[^{}]|\{[^{}]*\})*`;
+  // Button(action: …) { Image } and Button { … } label: { Image }
+  for (const m of text.matchAll(new RegExp(String.raw`\bButton\s*(?:${ARGS}\s*\{\s*${IMG}\s*\}|(?:${ARGS}\s*)?\{${BODY}\}\s*label:\s*\{\s*${IMG}\s*\})`, 'gs')))
+    if (!m[0].includes('accessibilityLabel') && !text.slice(m.index + m[0].length, m.index + m[0].length + 250).includes('accessibilityLabel'))
       F('SWU-ICON-NAME', 'major', lineOf(text, m.index), 'SF Symbol-only button without accessibilityLabel', 'WCAG 4.1.2');
 }
 
@@ -214,7 +271,12 @@ function auditXaml(path, text, ctx, out) {
   const rel = ctx.rel(path);
   for (const m of text.matchAll(/<(Button|AppBarButton|ToggleButton|ImageButton)\b([^>]*)>/gs)) {
     const a = m[2];
-    if (!/Content=|AutomationProperties\.Name|SemanticProperties\.Description|Label=|Text=/.test(a))
+    let named = /Content=|AutomationProperties\.Name|SemanticProperties\.Description|Label=|Text=/.test(a);
+    if (!named && !a.trimEnd().endsWith('/')) { // <Button>Save</Button> or a child <TextBlock Text="Save"/>
+      const from = m.index + m[0].length, end = text.indexOf(`</${m[1]}>`, from), inner = end === -1 ? '' : text.slice(from, end);
+      named = inner.replace(/<[^>]*>/g, '').trim() !== '' || /\bText\s*=\s*"[^"]+"/.test(inner);
+    }
+    if (!named)
       out.push({ rule: 'XAML-NAME', sev: 'major', file: rel, line: lineOf(text, m.index), msg: `${m[1]} without Content/Label/AutomationProperties.Name (verify content)`, ref: 'WCAG 4.1.2', snippet: snippetAt(text, m.index) });
     for (const v of a.matchAll(/(?:MinHeight|Height|MinimumHeightRequest|HeightRequest)\s*=\s*"(\d+)"/g)) if (+v[1] < 24)
       out.push({ rule: 'XAML-TARGET', sev: 'blocker', file: rel, line: lineOf(text, m.index), msg: `${m[1]} ${v[1]} (<24)`, ref: 'WCAG 2.5.8', snippet: snippetAt(text, m.index) });
@@ -248,36 +310,42 @@ function walk(roots) {
   return out;
 }
 
+const git = (args, cwd) => { try { return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }); } catch { return null; } };
+const gitTop = (cwd) => (git(['rev-parse', '--show-toplevel'], cwd) || '').trim() || null;
+const nulList = (s) => (s || '').split('\0').filter(Boolean); // -z output: names are never quoted (accents, spaces…)
+const UNTRACKED = ['ls-files', '--others', '--exclude-standard', '--full-name', '-z'];
+
 export function changedLines(ref = 'HEAD', cwd = '.') {
   // map absolute file -> Set of changed line numbers (null = whole file is new/untracked)
-  const run = (c) => { try { return execSync(c, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }); } catch { return null; } };
-  const top = (run('git rev-parse --show-toplevel') || '').trim(); if (!top) return null;
+  const top = gitTop(cwd); if (!top) return null;
   const map = new Map(); let cur = null;
-  for (const line of (run(`git diff -U0 ${ref}`) || '').split('\n')) {
-    if (line.startsWith('+++ ')) { const f = line.slice(4).replace(/^b\//, ''); cur = f === '/dev/null' ? null : join(top, f); if (cur && !map.has(cur)) map.set(cur, new Set()); }
+  const diff = git(['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/', '-U0', ref], top);
+  for (const line of (diff || '').split('\n')) {
+    if (line.startsWith('+++ ')) { const f = line.slice(4).replace(/\t$/, '').replace(/^"(.*)"$/, '$1').replace(/^b\//, ''); cur = f === '/dev/null' ? null : join(top, f); if (cur && !map.has(cur)) map.set(cur, new Set()); }
     else if (cur && line.startsWith('@@')) { const m = line.match(/\+(\d+)(?:,(\d+))?/); const a = +m[1], n = m[2] == null ? 1 : +m[2]; for (let i = a; i < a + n; i++) map.get(cur).add(i); }
   }
-  for (const f of (run('git ls-files --others --exclude-standard') || '').split('\n').filter(Boolean)) map.set(join(top, f), null);
+  for (const f of nulList(git(UNTRACKED, top))) map.set(join(top, f), null);
   return map;
 }
 
 export function changedFiles(ref = 'HEAD', cwd = '.') {
-  const run = (c) => { try { return execSync(c, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { return null; } };
-  const top = run('git rev-parse --show-toplevel'); if (!top) return null;
-  const files = new Set([...(run(`git diff --name-only ${ref}`) || []), ...(run('git ls-files --others --exclude-standard') || [])]);
-  return [...files].map((f) => join(top[0], f)).filter((f) => existsSync(f) && VISUAL.has(extname(f).toLowerCase()) && !f.split(/[\/\\]/).some((s) => SKIP.has(s)));
+  const top = gitTop(cwd); if (!top) return null;
+  const files = new Set([...nulList(git(['diff', '--name-only', '-z', ref], top)), ...nulList(git(UNTRACKED, top))]);
+  return [...files].filter((f) => VISUAL.has(extname(f).toLowerCase()) && !f.split('/').some((s) => SKIP.has(s)))
+    .map((f) => join(top, f)).filter((f) => existsSync(f));
 }
 
-export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = null } = {}) {
+export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = null, fileFilter = null } = {}) {
   const roots = paths.map((p) => resolve(p));
   let base = roots.length === 1 ? roots[0] : roots.reduce((a, b) => { while (!b.startsWith(a)) a = dirname(a); return a; });
   if (existsSync(base) && statSync(base).isFile()) base = dirname(base);
   const cwd = process.cwd();
   if (roots.every((r) => r === cwd || r.startsWith(cwd + '/') || r.startsWith(cwd + '\\'))) base = cwd; // stable repo-relative paths
-  const ctx = { rel: (p) => relative(base, p) || basename(p), platform };
+  const ctx = { rel: (p) => (relative(base, p) || basename(p)).split(sep).join('/'), platform };
   const findings = []; const inv = { colors: {}, fontSizes: {}, tailwindArbitrary: {}, important: 0, reducedMotion: 0, animations: new Set() };
   let n = 0;
   for (const p of walk(roots)) {
+    if (fileFilter && !fileFilter(p)) continue;
     let ext = extname(p).toLowerCase(); if (p.endsWith('.blade.php')) ext = '.php';
     if (!(WEB.has(ext) || CSS.has(ext) || OTHER.has(ext))) continue;
     let text; try { if (statSync(p).size > 1_500_000) continue; text = readFileSync(p, 'utf8'); } catch { continue; }
@@ -337,7 +405,8 @@ function toMd(r) {
 }
 
 function main(argv) {
-  let json = false, platform = 'auto', failOn = null, max = 8, changed = null, listOnly = false, allLines = false; const paths = [];
+  let json = false, platform = 'auto', failOn = null, max = 8, changed = null, changedArg = null, listOnly = false, allLines = false;
+  const paths = [], include = [], exclude = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--json') json = true;
@@ -345,20 +414,36 @@ function main(argv) {
     else if (a === '--fail-on') failOn = argv[++i];
     else if (a === '--max-per-rule') max = +argv[++i];
     else if (a === '--all-lines') allLines = true;
-    else if (a === '--changed' || a === '--list-changed') { listOnly = a === '--list-changed'; changed = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : 'HEAD'; }
+    else if (a === '--include') include.push(argv[++i]);
+    else if (a === '--exclude') exclude.push(argv[++i]);
+    else if (a === '--changed' || a === '--list-changed') { listOnly = a === '--list-changed'; changed = 'HEAD'; if (argv[i + 1] && !argv[i + 1].startsWith('--')) changedArg = argv[++i]; }
     else paths.push(a);
   }
+  const fileFilter = include.length || exclude.length ? makeFileFilter(include, exclude) : null;
   let lineFilter = null;
   if (changed) {
-    const files = changedFiles(changed, paths[0] || '.');
-    if (!allLines && files) lineFilter = changedLines(changed, paths[0] || '.');
-    if (files == null) { console.error('Not a git repository: pass the files to review explicitly.'); return 2; }
-    if (listOnly) { console.log(files.join('\n')); return 0; }
+    const anchor = [...paths, changedArg].find((p) => p && existsSync(p));
+    const cwd = !anchor ? '.' : statSync(anchor).isDirectory() ? anchor : dirname(anchor);
+    if (changedArg) {
+      const isRef = git(['rev-parse', '--verify', '--quiet', `${changedArg}^{commit}`], cwd) != null, isPath = existsSync(changedArg);
+      if (isRef && isPath) { console.error(`"${changedArg}" is both a git ref and a path: write ./${changedArg} for the path or refs/heads/${changedArg} for the ref.`); return 2; }
+      if (isRef) changed = changedArg;
+      else if (isPath) paths.unshift(changedArg);
+      else { console.error(`"${changedArg}" is neither a git ref nor an existing path.`); return 2; }
+    }
+    const missing = paths.find((p) => !existsSync(p));
+    if (missing) { console.error(`Path not found: ${missing}`); return 2; }
+    const scope = paths.map((p) => realpathSync.native(resolve(p)));
+    const all = changedFiles(changed, cwd);
+    if (all == null) { console.error('Not a git repository: pass the files to review explicitly.'); return 2; }
+    const files = all.filter((f) => (!scope.length || scope.some((s) => f === s || f.startsWith(s + sep))) && (!fileFilter || fileFilter(f)));
+    if (listOnly) { if (files.length) console.log(files.map(cwdRel).join('\n')); return 0; }
     if (!files.length) { console.log('No changed visual files.'); return 0; }
+    if (!allLines) lineFilter = changedLines(changed, cwd);
     paths.splice(0, paths.length, ...files);
   }
-  if (!paths.length) { console.error('usage: node scan.mjs <paths...> [--json] [--platform web|mobile|desktop] [--fail-on blocker|major] | --changed [ref] | --list-changed [ref]'); return 2; }
-  const r = run(paths, { platform, maxPerRule: max, lineFilter });
+  if (!paths.length) { console.error('usage: node scan.mjs <paths...> [--json] [--platform web|mobile|desktop] [--fail-on blocker|major] [--include glob] [--exclude glob] | --changed [ref] [paths...] | --list-changed [ref] [paths...]'); return 2; }
+  const r = run(paths, { platform, maxPerRule: max, lineFilter, fileFilter });
   console.log(json ? JSON.stringify(r, null, 2) : toMd(r));
   if (failOn && Object.entries(r.counts).some(([s, n]) => SEV[s] <= SEV[failOn] && n)) return 1;
   return 0;

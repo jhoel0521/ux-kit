@@ -17,7 +17,7 @@ You are planning or building UI. This skill keeps UX/UI quality in mind without 
 - If `.ux/config.yaml` exists, read it: platforms, apps, accessibility level, severity overrides, exceptions, `check.after_change`.
 - Read only what the task needs from `.ux/standard/` (users.md for who/where, brand.md + tokens.json for anything visual).
 - If `.ux/` does not exist, continue with the defaults below and mention once, in one line, that `ux-init` would give the project its own standard.
-- **Facts drift**: if the code you are touching clearly uses a different stack/theme than `config.yaml` says for that app, note it in one line and update the fact (stack, theme path) — do not stop the work. Decisions (users, levels, exceptions) are never changed silently.
+- **Facts drift**: if the code you are touching clearly uses a different stack/theme than `config.yaml` says for that app, note it in one line and update the fact (stack, theme path) — do not stop the work. In a read-only session (plan mode, read-only sandbox) only note it. Decisions (users, levels, exceptions) are never changed silently.
 
 ## 1. When planning or proposing changes
 Add a short "UX/UI considerations" part to the plan you are writing (wherever the plan lives: a proposal, design doc, task list, plan-mode output). Cover only what applies:
@@ -34,7 +34,7 @@ Add a short "UX/UI considerations" part to the plan you are writing (wherever th
 Keep it proportional: a small button change needs two lines, a new module needs the full list.
 
 ## 2. When building
-Follow the standard first, then these defaults (details in `.ux/knowledge/`):
+Follow the standard first, then these defaults (details in `.ux/knowledge/` when it exists):
 1. Use the project's tokens/theme; no literal colors, sizes or spacing in components.
 2. Targets: ≥ 24×24 CSS px always (WCAG 2.5.8); touch ≥ 44pt iOS / 48dp Android / ~40epx Windows for anything important.
 3. Contrast: text ≥ 4.5:1 (large ≥ 3:1), UI parts and focus ≥ 3:1, in every theme.
@@ -49,4 +49,4 @@ Follow the standard first, then these defaults (details in `.ux/knowledge/`):
 When a law or heuristic justifies a decision, name it briefly — never turn laws into numeric limits (read `.ux/knowledge/myths.md` if tempted).
 
 ## 3. When the UI change is done
-If `check.after_change` is true (default) or the user asks, run **ux-check** on the changed files before declaring the work finished. It is light: it only looks at changed visual files.
+If `check.after_change` is true (default) or the user asks, run **ux-check** on the changed files before declaring the work finished. It is light: it only looks at changed visual files. Without `.ux/` it still runs, with reduced defaults.
