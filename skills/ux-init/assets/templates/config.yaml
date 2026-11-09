@@ -1,0 +1,48 @@
+# ux-kit project configuration — https://github.com/<owner>/ux-kit
+# Facts detected from code (apps, stacks, themes) are synced automatically by ux-kit skills.
+# Decisions (users per app, levels, severities, exceptions) are asked and confirmed by the team.
+version: 1
+
+project:
+  name: "{{project-name}}"
+  type: "{{new|existing}}"
+  language: "{{report language, e.g. es}}"   # reports and generated docs; default: conversation language
+
+platforms: []            # default for all apps: web | android | ios | macos | windows | linux | desktop | tv | watch
+                         # ("desktop" = cross-platform desktop when the OS is not fixed, e.g. Tauri/Electron/Swing)
+
+apps: []                 # synced from code. Example:
+#  - name: backoffice
+#    path: apps/backoffice
+#    stack: astro + tailwind            # several stacks in one app: join with " + " (e.g. jetpack-compose + android-views)
+#    platforms: [web]
+#    theme: apps/backoffice/src/styles/theme.css
+#    users: [warehouse-operator]          # profiles from standard/users.md (decision)
+#    overrides:                           # app-specific decisions
+#      accessibility: { level: AAA }
+
+accessibility:
+  standard: wcag-2.2
+  level: AA              # A | AA | AAA — the fixed base (knowledge/severity.md) always applies
+
+severity: {}             # configurable rule ids from knowledge/severity.md, e.g.:
+#  touch-target-platform: major
+#  literal-design-values: minor
+#  missing-empty-state: major
+
+check:
+  after_change: true     # ux-guide asks the agent to run ux-check when it finishes a UI change
+  base_ref: HEAD         # git reference to compare against
+  include: []            # globs; empty = whole repo
+  exclude: ["**/*.test.*", "**/*.spec.*", "**/generated/**"]
+
+exceptions: []           # approved by the team. Example:
+#  - rule: form-length
+#    where: "Warehouse receipt form"
+#    reason: "Daily use by experts; single page"
+#    date: 2026-11-09
+
+integrations: {}         # optional skills, e.g.:
+#  openspec: { enabled: true }
+#  scrum: { enabled: true, backlog: docs/backlog.md }
+#  log: { enabled: true, path: docs/ai-audit/log.md }

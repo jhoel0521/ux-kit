@@ -1,0 +1,26 @@
+# Contributing to ux-kit
+
+Thanks for helping! ux-kit aims to be useful for any agent, any methodology and any stack.
+
+## Ground rules
+1. **Skills stay portable.** Only the standard `SKILL.md` frontmatter fields: `name`, `description`, `license`, `compatibility`, `metadata`. No agent-specific syntax in skill bodies. Test changes in at least two agents.
+2. **No cross-skill file dependencies.** Shared material lives in `skills/ux-init/assets/` and is copied to `.ux/` in the user's project; other skills read `.ux/`.
+3. **The core knows no methodology.** OpenSpec, Scrum, Jira, logs… belong in integration skills (`ux-<tool>`), never in the core.
+4. **Evidence over dogma.** Every normative or numeric claim in `knowledge/` cites its source. Laws of UX justify decisions; they are not numeric limits (see `myths.md`).
+5. **Advisory.** Skills inform and ask; they never block the user's work.
+
+## Common contributions
+| Contribution | Where |
+|---|---|
+| New stack | `skills/ux-init/assets/knowledge/stacks/<stack>.md` + rules in `scripts/scan.mjs` + a fixture in `tests/fixtures/` |
+| New integration | `skills/ux-<tool>/SKILL.md` (does not modify the core) |
+| Knowledge | `skills/ux-init/assets/knowledge/*.md`, with sources |
+| Translations | `README.<lang>.md`; skills stay in English, reports follow the project language |
+
+## Testing scripts
+```bash
+node skills/ux-init/assets/scripts/detect.mjs tests/fixtures/monorepo --md
+node skills/ux-init/assets/scripts/scan.mjs tests/fixtures/monorepo --platform mobile
+node skills/ux-init/assets/scripts/tokens.mjs skills/ux-init/assets/templates/standard/tokens.json
+```
+Fixtures contain **intentional** UX/accessibility errors; every scanner rule should have a case there.
