@@ -16,7 +16,7 @@
 import { readdirSync, readFileSync, statSync, existsSync, realpathSync } from 'node:fs';
 import { join, relative, extname, basename, resolve, dirname, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'vendor', 'Pods', '.gradle', 'target',
   '.dart_tool', 'coverage', '.venv', 'venv', '__pycache__', '.idea', '.turbo', 'storybook-static', 'DerivedData',
@@ -448,4 +448,4 @@ function main(argv) {
   if (failOn && Object.entries(r.counts).some(([s, n]) => SEV[s] <= SEV[failOn] && n)) return 1;
   return 0;
 }
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) process.exitCode = main(process.argv.slice(2));
+if (isMain(import.meta.url)) process.exitCode = main(process.argv.slice(2));

@@ -14,6 +14,7 @@ import { resolve, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { contrastRatio } from './contrast.mjs';
+import { isMain } from './is-main.mjs';
 
 const VIEWPORTS = {
   mobile: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
@@ -173,4 +174,4 @@ async function main(argv) {
   console.log(json ? JSON.stringify(r, null, 2) : toMd(r));
   return r.counts.blocker ? 1 : 0;
 }
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });
+if (isMain(import.meta.url)) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

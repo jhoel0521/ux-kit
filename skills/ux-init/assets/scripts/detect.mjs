@@ -7,7 +7,7 @@
 // Read-only: never executes project code.
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, basename, extname, dirname, resolve, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'vendor', 'Pods', '.gradle', 'target',
   '.dart_tool', 'coverage', '.venv', 'venv', '__pycache__', '.idea', '.turbo', 'storybook-static', 'DerivedData',
@@ -35,7 +35,29 @@ const NPM = {
   playwright: ['tooling', 'playwright'], '@playwright/test': ['tooling', 'playwright'], '@storybook/react': ['tooling', 'storybook'],
 };
 const PREFIX = { '@radix-ui/': ['ui', 'radix'], '@nivo/': ['charts', 'nivo'], '@visx/': ['charts', 'visx'] };
-const THEME_RE = /(^|[\/\\])(theme|tokens?|colou?rs?|palette|variables|globals?|app|index|styles?|Type|Color|Theme)\.(css|scss|ts|js|mjs|json|kt|swift|dart|xaml|qml)$|tailwind\.config\.|\.tokens\.json$|(^|[\/\\])values[\/\\]colors\.xml$/i;
+const THEME_EXT = '\\.(css|scss|ts|js|mjs|json|kt|swift|dart|xaml|qml)$';
+const THEME_NAME_RE = new RegExp(`(^|/)(theme|tokens?|colou?rs?|palette|variables|globals?|styles?|type)${THEME_EXT}`, 'i');
+// "app" and "index" are mostly entry points and barrels: they count only inside a theme folder or with theme code.
+const GENERIC_NAME_RE = new RegExp(`(^|/)(app|index)${THEME_EXT}`, 'i');
+const THEME_DIR_RE = /(^|\/)(themes?|styles?|design|design-system|tokens)\//i;
+const THEME_FILES = [[/tailwind\.config\./i, 'Tailwind config'], [/\.tokens\.json$/i, 'design tokens file'], [/(^|\/)values\/colors\.xml$/i, 'Android colors']];
+const THEME_SIGNALS = [[/@theme\b/, 'defines @theme'], [/:root\s*\{[^}]*--[\w-]+\s*:/, 'defines CSS variables'],
+  [/\b(createTheme|extendTheme)\s*\(/, 'creates a theme'], [/\bThemeData\s*\(/, 'uses ThemeData'],
+  [/\b(light|dark)ColorScheme\s*\(/, 'defines a color scheme'], [/<ResourceDictionary\b/, 'defines a resource dictionary']];
+const MAX_THEMES = 15;
+
+// rel is relative to the app and uses "/". Returns { score, reason }, or null when the file is not a theme candidate.
+function themeMatch(rel, file) {
+  const known = THEME_FILES.find(([re]) => re.test(rel));
+  const named = THEME_NAME_RE.test(rel);
+  if (!known && !named && !GENERIC_NAME_RE.test(rel)) return null;
+  if (known) return { score: 3, reason: known[1] };
+  const txt = read(file, 100_000);
+  const signal = THEME_SIGNALS.find(([re]) => re.test(txt));
+  if (signal) return { score: 2, reason: signal[1] };
+  if (named) return { score: 1, reason: 'file name' };
+  return THEME_DIR_RE.test(rel) ? { score: 1, reason: 'theme folder' } : null;
+}
 
 const read = (p, n = 300_000) => { try { return readFileSync(p, 'utf8').slice(0, n); } catch { return ''; } };
 
@@ -137,20 +159,24 @@ export function detect(rootArg) {
   for (const f of files) {
     const d = owner(f); if (!d) continue; const a = apps.get(d); const ext = extname(f).toLowerCase();
     if (ext) a.exts[ext] = (a.exts[ext] || 0) + 1;
-    if (THEME_RE.test(f) && a.themes.length < 15) a.themes.push(portable(relative(root, f)));
+    const theme = themeMatch(portable(relative(d, f)), f);
+    if (theme) a.themes.push({ path: portable(relative(root, f)), ...theme });
     if (ext === '.swift' && !a.framework.has('swiftui')) { const t = read(f, 20000); if (t.includes('import SwiftUI')) a.framework.add('swiftui'); else if (t.includes('import UIKit')) a.framework.add('uikit'); else if (t.includes('import AppKit')) { a.framework.add('appkit'); a.platforms.add('macos'); } }
     if (ext === '.xml' && /[\/\\]res[\/\\]layout[^\/\\]*[\/\\]/.test(f)) a.framework.add('android-views');
     if (ext === '.java' && !a.framework.has('swing') && /import javax\.swing/.test(read(f, 20000))) { a.framework.add('swing'); a.platforms.add('desktop'); }
     if (ext === '.qml') a.framework.add('qml');
     if (f.endsWith('.blade.php')) a.framework.add('laravel-blade');
   }
+  // strongest evidence first, so a large project can't push the real theme past the limit
+  for (const a of apps.values()) a.themes = a.themes.sort((x, y) => y.score - x.score || x.path.localeCompare(y.path)).slice(0, MAX_THEMES);
   // drop root "app" that is only a workspace wrapper (no framework) when children exist
   const list = [...apps.entries()].filter(([d, a]) => a.framework.size || a.platforms.size || dirs.length === 1)
     .map(([d, a]) => ({
       name: basename(d), path: portable(relative(root, d)) || '.',
       stack: [...a.framework, ...a.ui, ...a.styling].join(' + ') || 'unknown',
       platforms: [...a.platforms].sort(), charts: [...a.charts], motion: [...a.motion], a11yTooling: [...a.a11y],
-      tooling: [...a.tooling], themeCandidates: a.themes,
+      tooling: [...a.tooling], themeCandidates: a.themes.map((t) => t.path),
+      themeReasons: Object.fromEntries(a.themes.map((t) => [t.path, t.reason])),
       topExtensions: Object.fromEntries(Object.entries(a.exts).sort((x, y) => y[1] - x[1]).slice(0, 8)),
     })).sort((x, y) => x.path.localeCompare(y.path));
   return { root: rootArg, monorepo: list.length > 1, apps: list,
@@ -163,13 +189,13 @@ function toMd(o) {
   for (const a of o.apps) {
     out.push(`## ${a.name} (\`${a.path}\`)`, `- Stack: ${a.stack}`, `- Platforms: ${a.platforms.join(', ') || '?'}`);
     if (a.charts.length) out.push(`- Charts: ${a.charts.join(', ')}`);
-    out.push(`- Theme candidates: ${a.themeCandidates.length ? a.themeCandidates.slice(0, 8).map((t) => '`' + t + '`').join(', ') : 'none found (look for literals in code)'}`);
+    out.push(`- Theme candidates: ${a.themeCandidates.length ? a.themeCandidates.slice(0, 8).map((t) => `\`${t}\` (${a.themeReasons[t]})`).join(', ') : 'none found (look for literals in code)'}`);
     out.push('');
   }
   return out.join('\n');
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2); const md = args.includes('--md');
   if (args.includes('--help') || args.includes('-h')) { console.log('usage: node detect.mjs [root] [--md]  — detect apps, stacks, platforms, theme files (JSON by default)'); process.exit(0); } const root = args.find((a) => !a.startsWith('--')) || '.';
   if (!existsSync(root) || !statSync(root).isDirectory()) { console.error('usage: node detect.mjs [root] [--md]'); process.exitCode = 2; }

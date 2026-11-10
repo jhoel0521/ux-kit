@@ -10,7 +10,7 @@
 //   node contrast.mjs "#ff00aa" "#fff" --suggest   also propose the nearest foreground that passes AA
 // Exit code: 0 all pairs pass AA · 1 some pair fails AA (not a script error) · 2 usage error.
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { isMain } from './is-main.mjs';
 
 const NAMED = { white: '#ffffff', black: '#000000', red: '#ff0000', green: '#008000', blue: '#0000ff',
   gray: '#808080', grey: '#808080', silver: '#c0c0c0', transparent: '#00000000', orange: '#ffa500', yellow: '#ffff00' };
@@ -167,4 +167,4 @@ function main(argv) {
   return results.every((r) => r.AA) ? 0 : 1;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) process.exitCode = main(process.argv.slice(2));
+if (isMain(import.meta.url)) process.exitCode = main(process.argv.slice(2));

@@ -1,6 +1,6 @@
 ---
 name: ux-check
-description: Light UX/UI review of what just changed — only the new or modified visual files of the current change (any language: HTML, CSS, JS/TS, Vue, Svelte, Blade, Kotlin/Compose, Swift, Dart, Java, C#, C++/Qt, XAML…) — against the project's .ux/ standard: accessibility, touch targets, focus, states, tokens and brand, platform conventions, copy. Detects standard drift in both directions and saves a short report. Use right after implementing a UI change, at the end of an apply/implementation step, before a PR, or when the user says "check the UI", "review what you changed", "ux check". Also usable on a path for a broader pass.
+description: "Light UX/UI review of what just changed — only the new or modified visual files of the current change (any language: HTML, CSS, JS/TS, Vue, Svelte, Blade, Kotlin/Compose, Swift, Dart, Java, C#, C++/Qt, XAML…) — against the project's .ux/ standard: accessibility, touch targets, focus, states, tokens and brand, platform conventions, copy. Detects standard drift in both directions and saves a short report. Use right after implementing a UI change, at the end of an apply/implementation step, before a PR, or when the user says \"check the UI\", \"review what you changed\", \"ux check\". Also usable on a path for a broader pass."
 license: MIT
 compatibility: Any agent supporting SKILL.md. Scripts need Node.js 18+ and .ux/ from ux-init; git is used to find changed files.
 metadata:

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -88,6 +88,57 @@ test('detect: paths use "/" and the root app has a real name', () => {
   });
   const paths = detect('tests/fixtures/monorepo').apps.map((a) => a.path);
   assert.deepEqual(paths, ['android', 'desktop-java', 'flutter', 'ios', 'web']);
+});
+
+test('detect: barrels are not theme candidates', () => {
+  withTempDir((dir) => {
+    write(dir, 'package.json', '{"dependencies":{"react":"^18.0.0"}}');
+    write(dir, 'src/services/index.ts', 'export * from "./a";');
+    write(dir, 'src/app.css', 'body{margin:0}');
+    write(dir, 'src/index.css', ':root{--brand:#000}');
+    write(dir, 'src/theme/index.ts', 'export const brand = "#000";');
+    const [app] = detect(dir).apps;
+    assert.deepEqual(app.themeCandidates, ['src/index.css', 'src/theme/index.ts']);
+    assert.equal(app.themeReasons['src/index.css'], 'defines CSS variables');
+    assert.equal(app.themeReasons['src/theme/index.ts'], 'theme folder');
+  });
+});
+
+test('detect: the strongest theme candidates survive the limit', () => {
+  withTempDir((dir) => {
+    write(dir, 'package.json', '{"dependencies":{"react":"^18.0.0"}}');
+    for (let i = 0; i < 20; i++) write(dir, `src/a${i}/colors.ts`, 'export const c = 1;');
+    write(dir, 'src/z/globals.css', '@theme { --color-a: #000; }');
+    write(dir, 'tailwind.config.ts', 'export default {};');
+    const { themeCandidates } = detect(dir).apps[0];
+    assert.equal(themeCandidates.length, 15);
+    assert.deepEqual(themeCandidates.slice(0, 2), ['tailwind.config.ts', 'src/z/globals.css']);
+  });
+});
+
+test('scripts: run when started through a linked folder', () => {
+  withTempDir((dir) => {
+    const link = join(dir, 'linked');
+    symlinkSync(SCRIPTS, link, 'junction');
+    for (const [script, args] of [['detect.mjs', ['--help']], ['scan.mjs', ['missing']], ['tokens.mjs', []], ['contrast.mjs', []], ['render.mjs', []]]) {
+      const r = spawnSync(process.execPath, [join(link, script), ...args], { cwd: dir, encoding: 'utf8' });
+      assert.ok(`${r.stdout}${r.stderr}`.trim(), `${script} printed nothing`);
+    }
+  });
+});
+
+test('skills: frontmatter values that need quotes have them', () => {
+  const skills = readdirSync(join(ROOT, 'skills'));
+  assert.ok(skills.includes('ux-check'));
+  for (const skill of skills) {
+    const text = readFileSync(join(ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
+    const frontmatter = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)[1];
+    assert.match(frontmatter, new RegExp(`^name: ${skill}\\s*$`, 'm'));
+    for (const line of frontmatter.split(/\r?\n/)) {
+      const value = line.match(/^\s*[\w-]+:\s+(.*)$/)?.[1];
+      if (value && !/^["'>|]/.test(value)) assert.doesNotMatch(value, /:\s|\s#/, `${skill}: ${line.slice(0, 40)}`);
+    }
+  }
 });
 
 test('scan --list-changed: keeps file names with accents', () => {

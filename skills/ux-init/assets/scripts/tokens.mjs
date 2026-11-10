@@ -6,7 +6,7 @@
 // type scale size/ratios; contrast pairs from $extensions["ux-kit.contrast-pairs"] ([{fg,bg,min}]) or inferred.
 // Exit code: 0 ok · 1 blocker issues · 2 usage error.
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { isMain } from './is-main.mjs';
 import { parseColor, contrastRatio } from './contrast.mjs';
 
 const KNOWN = new Set(['color', 'dimension', 'fontFamily', 'fontWeight', 'duration', 'cubicBezier', 'number',
@@ -119,4 +119,4 @@ function main(argv) {
   console.log(json ? JSON.stringify(r, null, 2) : toMd(r));
   return r.issues.some((x) => x.sev === 'blocker') ? 1 : 0;
 }
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) process.exitCode = main(process.argv.slice(2));
+if (isMain(import.meta.url)) process.exitCode = main(process.argv.slice(2));
