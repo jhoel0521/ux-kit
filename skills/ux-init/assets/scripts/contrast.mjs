@@ -78,7 +78,7 @@ export function parseColor(input) {
   return [r * 255, g * 255, b * 255, alpha];
 }
 
-const composite = (fg, bg) => [0, 1, 2].map((i) => fg[i] * fg[3] + bg[i] * (1 - fg[3])).concat(1);
+export const composite = (fg, bg) => [0, 1, 2].map((i) => fg[i] * fg[3] + bg[i] * (1 - fg[3])).concat(1);
 const solid = (fg, bg) => {
   if (bg[3] < 1) bg = composite(bg, [255, 255, 255, 1]);
   if (fg[3] < 1) fg = composite(fg, bg);
@@ -123,7 +123,7 @@ export function evaluate(fgS, bgS, { size = null, bold = false, ui = false, min 
 }
 
 export function suggest(fgS, bgS, need = 4.5) {
-  const fg = parseColor(fgS), bg = parseColor(bgS);
+  const [fg, bg] = solid(parseColor(fgS), parseColor(bgS)); // a translucent color is judged by how it looks on bg
   const toHex = (c) => '#' + c.slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
   const out = {};
   for (const [dir, target] of [['darker', [0, 0, 0]], ['lighter', [255, 255, 255]]]) {

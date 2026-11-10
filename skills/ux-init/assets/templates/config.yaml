@@ -1,4 +1,4 @@
-# ux-kit project configuration — https://github.com/<owner>/ux-kit
+# ux-kit project configuration — https://github.com/jhoel0521/ux-kit
 # Facts detected from code (apps, stacks, themes) are synced automatically by ux-kit skills.
 # Decisions (users per app, levels, severities, exceptions) are asked and confirmed by the team.
 version: 1

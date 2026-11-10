@@ -136,6 +136,17 @@ function analyzeManifest(file) {
 const MANIFEST = (b) => ['package.json', 'composer.json', 'build.gradle', 'build.gradle.kts', 'pubspec.yaml', 'Package.swift',
   'pom.xml', 'CMakeLists.txt', 'Cargo.toml'].includes(b) || b.endsWith('.csproj') || b.endsWith('.pro') || b.endsWith('.xcodeproj');
 
+function discardReason(file) {
+  const base = basename(file);
+  if (base === 'package.json') {
+    try {
+      const pkg = JSON.parse(read(file));
+      if (!Object.keys({ ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies }).length) return 'package.json has no dependencies';
+    } catch { return 'invalid package.json'; }
+  }
+  return `no UI stack found in ${base}`;
+}
+
 // Paths written to .ux/config.yaml use "/" on every OS so the file is portable.
 const portable = (p) => p.split(sep).join('/');
 
@@ -145,12 +156,16 @@ export function detect(rootArg) {
   const apps = new Map();
   const ensure = (dir) => { if (!apps.has(dir)) apps.set(dir, { framework: new Set(), ui: new Set(), styling: new Set(), charts: new Set(),
     motion: new Set(), a11y: new Set(), tooling: new Set(), platforms: new Set(), themes: [], exts: {} }); return apps.get(dir); };
+  const manifestDirs = new Set(); const discarded = new Map();
   for (const f of files) {
     if (!MANIFEST(basename(f))) continue;
-    const r = analyzeManifest(f); if (!r) continue;
+    const r = analyzeManifest(f);
+    if (!r && /^CMakeLists\.txt$|\.pro$/.test(basename(f))) continue; // one per source folder in C++ projects: not separate projects
     let dir = dirname(f);
     if (basename(dir) === 'src-tauri') dir = dirname(dir);
     if (/^build\.gradle/.test(basename(f)) && basename(dir) === 'app') dir = dirname(dir);
+    manifestDirs.add(dir);
+    if (!r) { if (!discarded.has(dir)) discarded.set(dir, discardReason(f)); continue; }
     const a = ensure(dir);
     for (const k of Object.keys(r)) for (const v of r[k]) a[k].add(v);
   }
@@ -179,7 +194,13 @@ export function detect(rootArg) {
       themeReasons: Object.fromEntries(a.themes.map((t) => [t.path, t.reason])),
       topExtensions: Object.fromEntries(Object.entries(a.exts).sort((x, y) => y[1] - x[1]).slice(0, 8)),
     })).sort((x, y) => x.path.localeCompare(y.path));
-  return { root: rootArg, monorepo: list.length > 1, apps: list,
+  const kept = new Set(list.map((a) => a.path));
+  const projects = [...manifestDirs].map((dir) => ({ dir, path: portable(relative(root, dir)) || '.' }));
+  const hasProjectFolders = projects.filter((p) => /^(apps|packages|services)\//.test(p.path)).length > 1;
+  const projectsWithoutUi = projects.filter((p) => !kept.has(p.path) && !(p.path === '.' && projects.length > 1)) // a root next to sub-projects is only a wrapper
+    .map((p) => ({ name: basename(p.dir), path: p.path, reason: discarded.get(p.dir) ?? 'no UI framework in its dependencies' }))
+    .sort((x, y) => x.path.localeCompare(y.path));
+  return { root: rootArg, monorepo: list.length > 1 || hasProjectFolders, apps: list, projectsWithoutUi,
     hasUx: existsSync(join(root, '.ux', 'config.yaml')), hasStandardTokens: existsSync(join(root, '.ux', 'standard', 'tokens.json')),
     hasGit: existsSync(join(root, '.git')) };
 }
@@ -192,6 +213,7 @@ function toMd(o) {
     out.push(`- Theme candidates: ${a.themeCandidates.length ? a.themeCandidates.slice(0, 8).map((t) => `\`${t}\` (${a.themeReasons[t]})`).join(', ') : 'none found (look for literals in code)'}`);
     out.push('');
   }
+  if (o.projectsWithoutUi.length) out.push('## Without UI (not added as apps)', ...o.projectsWithoutUi.map((p) => `- \`${p.path}\` — ${p.reason}`), '');
   return out.join('\n');
 }
 

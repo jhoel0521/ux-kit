@@ -31,7 +31,7 @@ Ask questions in one batch (use the agent's question tool if available). Prefer 
 **Brand → `brand.md` + `tokens.json`.**
 - Ask for logo files (paths in the repo or attachments), personality/voice, existing brand colors and fonts.
 - Build tokens in DTCG format: primitives (brand scale, neutrals, status colors, spacing on base 4/8, type scale, radii, durations) → semantic tokens for light and dark (`bg`, `surface`, `text`, `text-muted`, `border`, `action`, `on-action`, `danger`, `success`, `warning`, `focus`). Values only, never framework classes.
-- Set `$extensions["ux-kit.status"]` to `"defined"` once the team confirms the values (ux-check then reports token drift against them).
+- Set `$extensions["ux-kit.status"]` to `"defined"` once the team confirms the values (ux-check then reports token drift against them). Update or remove `$extensions["ux-kit.status-by-section"]` so it only lists sections still unconfirmed.
 - Declare contrast pairs in `$extensions["ux-kit.contrast-pairs"]` and validate:
   ```bash
   node .ux/scripts/tokens.mjs .ux/standard/tokens.json

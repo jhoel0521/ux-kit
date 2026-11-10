@@ -46,7 +46,7 @@ For the changed files the scanner ignores (or covers partially), read the diff a
 Load other knowledge files only when a finding needs justification.
 
 ## 4. Drift in both directions
-Check `.ux/standard/tokens.json → $extensions["ux-kit.status"]` first:
+Check `.ux/standard/tokens.json → $extensions["ux-kit.status"]` first. A section listed in `$extensions["ux-kit.status-by-section"]` (e.g. `primitive.space`) uses that status instead of the global one:
 - `placeholder` → the standard is not defined yet. Do not report `token-drift`; report literals as `literal-design-values` only and recommend ux-discover once in the report.
 - `extracted`/`defined` → apply:
   - **`token-drift`**: the code uses a value for something the standard defines differently (e.g. the action color is `#1d4ed8`, the token says `#2563eb`).

@@ -8,6 +8,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../skills/ux-init/assets/scripts/scan.mjs';
 import { detect } from '../skills/ux-init/assets/scripts/detect.mjs';
+import { check } from '../skills/ux-init/assets/scripts/tokens.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPTS = join(ROOT, 'skills', 'ux-init', 'assets', 'scripts');
@@ -139,6 +140,227 @@ test('skills: frontmatter values that need quotes have them', () => {
       if (value && !/^["'>|]/.test(value)) assert.doesNotMatch(value, /:\s|\s#/, `${skill}: ${line.slice(0, 40)}`);
     }
   }
+});
+
+test('detect: project folders make a monorepo and projects without UI are explained', () => {
+  withTempDir((dir) => {
+    write(dir, 'package.json', '{"devDependencies":{"husky":"^9.0.0"}}');
+    write(dir, 'apps/shop/package.json', '{"dependencies":{"next":"16.0.0","react":"19.0.0"}}');
+    write(dir, 'apps/admin/package.json', '{"name":"admin"}');
+    write(dir, 'services/api/package.json', '{"dependencies":{"express":"^5.0.0"}}');
+    write(dir, 'services/bad/package.json', '{nope');
+    const r = detect(dir);
+    assert.equal(r.monorepo, true);
+    assert.deepEqual(r.apps.map((a) => a.path), ['apps/shop']);
+    assert.deepEqual(r.projectsWithoutUi.map((p) => [p.path, p.reason]), [
+      ['apps/admin', 'package.json has no dependencies'],
+      ['services/api', 'no UI framework in its dependencies'],
+      ['services/bad', 'invalid package.json'],
+    ]);
+    assert.match(cli('detect.mjs', ['.', '--md'], dir).out, /Without UI[\s\S]*`apps\/admin` — package\.json has no dependencies/);
+  });
+});
+
+test('detect: one UI app alone is not a monorepo', () => {
+  withTempDir((dir) => {
+    write(dir, 'package.json', '{"dependencies":{"react":"^18.0.0"}}');
+    const r = detect(dir);
+    assert.equal(r.monorepo, false);
+    assert.deepEqual(r.projectsWithoutUi, []);
+  });
+});
+
+const tokensFile = (dir, data) => { write(dir, 'tokens.json', JSON.stringify(data)); return join(dir, 'tokens.json'); };
+const colorGroup = (values) => ({ color: { $type: 'color', ...Object.fromEntries(Object.entries(values).map(([k, v]) => [k, { $value: v }])) } });
+const pairsOf = (...pairs) => ({ 'ux-kit.contrast-pairs': pairs });
+
+test('tokens: a removed mode is a note, a typo stays major', () => {
+  withTempDir((dir) => {
+    const file = tokensFile(dir, { semantic: { light: colorGroup({ text: '#000000', bg: '#ffffff' }) }, $extensions: pairsOf(
+      { fg: 'semantic.dark.color.text', bg: 'semantic.dark.color.bg', min: 4.5 },
+      { fg: 'semantic.light.color.txt', bg: 'semantic.light.color.bg', min: 4.5 }) });
+    assert.deepEqual(check(file).issues.map((i) => i.sev), ['suggestion', 'major']);
+  });
+});
+
+test('tokens: --suggest prints the nearest passing value next to the failure', () => {
+  withTempDir((dir) => {
+    const file = tokensFile(dir, { c: colorGroup({ fg: '#999999', bg: '#ffffff' }), $extensions: pairsOf({ fg: 'c.color.fg', bg: 'c.color.bg', min: 4.5 }) });
+    assert.doesNotMatch(check(file).issues[0].msg, /nearest passing/);
+    assert.match(check(file, 4, { withSuggestions: true }).issues[0].msg, /nearest passing: darker #[0-9a-f]{6} \(4\.\d+:1\)/);
+    assert.match(cli('tokens.mjs', ['tokens.json', '--suggest'], dir).out, /nearest passing: darker/);
+  });
+});
+
+test('tokens: status by section is reported and validated', () => {
+  withTempDir((dir) => {
+    const file = tokensFile(dir, { primitive: colorGroup({ a: '#000000' }), $extensions: {
+      'ux-kit.status': 'extracted', 'ux-kit.status-by-section': { 'primitive.color': 'placeholder', 'primitive.space': 'wrong' } } });
+    const r = check(file);
+    assert.equal(r.info.sectionStatus['primitive.color'], 'placeholder');
+    assert.deepEqual(r.issues.map((i) => i.msg), ['unknown status: wrong', 'status set for a section with no tokens']);
+  });
+});
+
+test('tokens: translucent colors are composited over the pair background', () => {
+  withTempDir((dir) => {
+    const black = (alpha) => ({ colorSpace: 'srgb', components: [0, 0, 0], alpha, hex: '#000000' });
+    const file = tokensFile(dir, { c: { color: { $type: 'color', fg: { $value: black(0.5) }, tint: { $value: black(0.5) }, solid: { $value: '#000000' }, bg: { $value: '#ffffff' } } },
+      $extensions: pairsOf({ fg: 'c.color.fg', bg: 'c.color.bg', min: 1 }, { fg: 'c.color.bg', bg: 'c.color.tint', min: 1 }, { fg: 'c.color.bg', bg: 'c.color.tint', over: 'c.color.solid', min: 1 }) });
+    const [fg, tint, over] = check(file).info.contrast.map((p) => p.ratio);
+    assert.equal(fg, 3.98); // 50% black over white, not solid black
+    assert.equal(tint, 3.98);
+    assert.equal(over, 21);
+    const faint = tokensFile(dir, { c: { color: { $type: 'color', fg: { $value: black(0.08) }, bg: { $value: '#ffffff' } } }, $extensions: pairsOf({ fg: 'c.color.fg', bg: 'c.color.bg', min: 3 }) });
+    const { msg } = check(faint, 4, { withSuggestions: true }).issues[0];
+    assert.match(msg, /nearest passing: darker #[89][0-9a-f]{5} \(3\.\d+:1\)$/);
+  });
+});
+
+const TAILWIND = `import type { Config } from 'tailwindcss';
+import colors from 'tailwindcss/colors';
+globalThis.projectCodeRan = process.exit(9);
+const brand = { DEFAULT: '#e63f6e', dark: '#c7305a' } as const;
+const shared = { info: '#0284c7' };
+const config: Config = {
+  // theme: { colors: { wrong: '#000' } },
+  content: ['./src/**/*.tsx'],
+  theme: {
+    extend: {
+      colors: {
+        brand,
+        ...shared,
+        /* comment with 'quote */
+        bg: { DEFAULT: '#fff9fb' },
+        surface: { DEFAULT: '#ffffff' },
+        border: { DEFAULT: 'rgba(30, 22, 28, 0.08)' },
+        text: { primary: '#24151c', muted: '#8a7a84', inverse: '#ffffff' },
+        danger: colors.red[600],
+        accent: 'var(--accent)',
+      },
+      borderRadius: { sm: '6px', md: '0.75rem' },
+      transitionDuration: { fast: '150ms', slow: '0.4s' },
+      fontFamily: { sans: ['var(--font-inter)', 'Inter', 'sans-serif'] },
+      fontSize: { sm: ['0.875rem', { lineHeight: '1.25rem' }] },
+      spacing: { 18: '4.5rem', '0.5': '2px' },
+    },
+  },
+} satisfies Config;
+export default config;
+`;
+
+test('tokens --from-tailwind: reads the config without running it', () => {
+  withTempDir((dir) => {
+    write(dir, 'tailwind.config.ts', TAILWIND);
+    const r = cli('tokens.mjs', ['--from-tailwind', 'tailwind.config.ts'], dir);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.err, /Not readable without running code: .*colors\.danger.*colors\.accent/);
+    const t = JSON.parse(r.out);
+    const { color, radius, duration, space } = t.primitive;
+    assert.equal(color.brand.$value, '#e63f6e');
+    assert.equal(color['brand-dark'].$value, '#c7305a');
+    assert.equal(color.info.$value, '#0284c7');
+    assert.equal(color.wrong, undefined);
+    assert.deepEqual(color.border.$value, { colorSpace: 'srgb', components: [0.1176, 0.0863, 0.1098], alpha: 0.08 });
+    assert.deepEqual(radius.md.$value, { value: 0.75, unit: 'rem' });
+    assert.deepEqual(duration.slow.$value, { value: 0.4, unit: 's' });
+    assert.deepEqual(t.primitive['font-family'].sans.$value, ['Inter', 'sans-serif']);
+    assert.deepEqual(t.primitive['font-size'].sm.$value, { value: 0.875, unit: 'rem' });
+    assert.deepEqual(space['0_5'].$value, { value: 2, unit: 'px' });
+    assert.equal(t.semantic.light.color.action.$value, '{primitive.color.brand}');
+    assert.equal(t.semantic.light.color['on-action'].$value, '{primitive.color.text-inverse}');
+    assert.equal(t.semantic.light.color.danger, undefined);
+    assert.equal(t.$extensions['ux-kit.status'], 'extracted');
+    write(dir, 'out.json', r.out);
+    const issues = check(join(dir, 'out.json')).issues.filter((i) => !i.msg.startsWith('contrast '));
+    assert.deepEqual(issues.filter((i) => i.sev === 'blocker' || i.sev === 'major'), []);
+  });
+});
+
+test('tokens --out: merges over the template and protects a defined standard', () => {
+  withTempDir((dir) => {
+    write(dir, 'tailwind.config.ts', TAILWIND.replace(/\s+spacing: .*\n/, '\n').replace(/\s+fontSize: .*\n/, '\n'));
+    write(dir, 'tokens.json', readFileSync(join(ROOT, 'skills', 'ux-init', 'assets', 'templates', 'standard', 'tokens.json'), 'utf8'));
+    const args = ['--from-tailwind', 'tailwind.config.ts', '--out', 'tokens.json'];
+    const r = cli('tokens.mjs', args, dir);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /Still template values: primitive\.space, primitive\.font-size/);
+    assert.match(r.out, /semantic\.dark and its contrast pairs were removed/);
+    const t = JSON.parse(readFileSync(join(dir, 'tokens.json'), 'utf8'));
+    assert.equal(t.semantic.dark, undefined);
+    assert.ok(t.semantic.size['target-min']);
+    assert.equal(t.primitive.space['4'].$value.value, 16);
+    assert.deepEqual(t.$extensions['ux-kit.status-by-section'], { 'primitive.space': 'placeholder', 'primitive.font-size': 'placeholder' });
+    assert.ok(t.$extensions['ux-kit.contrast-pairs'].every((p) => p.fg.startsWith('semantic.light.')));
+    t.$extensions['ux-kit.status'] = 'defined';
+    t.primitive.color.brand.$value = '#123456';
+    write(dir, 'tokens.json', JSON.stringify(t));
+    assert.equal(cli('tokens.mjs', args, dir).code, 2);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'tokens.json'), 'utf8')).primitive.color.brand.$value, '#123456');
+    assert.equal(cli('tokens.mjs', [...args, '--force'], dir).code, 0);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'tokens.json'), 'utf8')).primitive.color.brand.$value, '#e63f6e');
+  });
+});
+
+test('tokens --from-css: reads @theme, :root, dark blocks and var()', () => {
+  withTempDir((dir) => {
+    write(dir, 'theme.css', `@import 'tailwindcss';
+/* :root { --ignored: #000; } */
+@theme { --color-brand: #e63f6e; --radius-md: 12px; --text-sm: 0.875rem; --text-sm--line-height: 1.25rem; --font-sans: "Inter", sans-serif; --duration-fast: 150ms; --background-image-x: linear-gradient(#fff, #000); }
+:root { --background: #ffffff; --foreground: var(--ink); --ink: #111111; --primary: 222 47% 11%; --primary-foreground: #ffffff; --border: rgb(0 0 0 / 10%); --z: 10; }
+.card { --background: #123456; }
+[data-theme="blue"] { --background: #0000ff; }
+.dark { --background: #000000; --foreground: #eeeeee; }
+@media (prefers-color-scheme: dark) { :root { --primary: #ffffff; } }
+`);
+    const r = cli('tokens.mjs', ['--from-css', 'theme.css'], dir);
+    assert.equal(r.code, 0, r.err);
+    const t = JSON.parse(r.out); const { color } = t.primitive;
+    assert.equal(color.background.$value, '#ffffff');
+    assert.equal(color.foreground.$value, '#111111');
+    assert.equal(color.ignored, undefined);
+    assert.equal(color['dark-background'].$value, '#000000');
+    assert.equal(color['dark-primary'].$value, '#ffffff');
+    assert.equal(color.border.$value.alpha, 0.1);
+    assert.deepEqual(t.primitive.radius.md.$value, { value: 12, unit: 'px' });
+    assert.deepEqual(Object.keys(t.primitive['font-size']).filter((k) => k !== '$type'), ['sm']);
+    assert.deepEqual(t.primitive['font-family'].sans.$value, ['Inter', 'sans-serif']);
+    assert.equal(t.semantic.light.color.text.$value, '{primitive.color.foreground}');
+    assert.equal(t.semantic.dark.color.bg.$value, '{primitive.color.dark-background}');
+    assert.ok(t.$extensions['ux-kit.contrast-pairs'].some((p) => p.fg === 'semantic.dark.color.text'));
+  });
+});
+
+test('tokens --from-mui: reads createTheme', () => {
+  withTempDir((dir) => {
+    write(dir, 'theme.ts', `import { createTheme } from '@mui/material';
+export const theme = createTheme({
+  palette: { mode: 'light', primary: { main: '#1976d2', contrastText: '#ffffff' }, error: { main: '#d32f2f' }, background: { default: '#fafafa', paper: '#ffffff' }, text: { primary: '#111111' } },
+  shape: { borderRadius: 8 },
+  typography: { fontFamily: 'Roboto, Arial, sans-serif' },
+});
+`);
+    const r = cli('tokens.mjs', ['--from-mui', 'theme.ts'], dir);
+    assert.equal(r.code, 0, r.err);
+    const t = JSON.parse(r.out); const semantic = t.semantic.light.color;
+    assert.equal(semantic.action.$value, '{primitive.color.primary-main}');
+    assert.equal(semantic['on-action'].$value, '{primitive.color.primary-contrastText}');
+    assert.equal(semantic.surface.$value, '{primitive.color.background-paper}');
+    assert.equal(t.primitive.color.mode, undefined);
+    assert.deepEqual(t.primitive.radius.md.$value, { value: 8, unit: 'px' });
+    assert.deepEqual(t.primitive['font-family'].sans.$value, ['Roboto', 'Arial', 'sans-serif']);
+  });
+});
+
+test('tokens --from-*: bad input is a usage error', () => {
+  withTempDir((dir) => {
+    write(dir, 'empty.css', 'body{color:red}');
+    write(dir, 'no-theme.js', 'export default {};');
+    assert.equal(cli('tokens.mjs', ['--from-css', 'empty.css'], dir).code, 2);
+    assert.equal(cli('tokens.mjs', ['--from-tailwind', 'no-theme.js'], dir).code, 2);
+    assert.equal(cli('tokens.mjs', ['--from-tailwind', 'missing.js'], dir).code, 2);
+    assert.equal(cli('tokens.mjs', ['--from-tailwind'], dir).code, 2);
+  });
 });
 
 test('scan --list-changed: keeps file names with accents', () => {

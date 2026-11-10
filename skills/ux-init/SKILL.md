@@ -17,7 +17,7 @@ Creates or syncs `.ux/` at the repository root. Everything ux-kit needs lives th
 ```bash
 node ASSETS/scripts/detect.mjs <repo-root> --md
 ```
-Note every app (path, stack, platforms, theme candidates), whether it's a monorepo, and whether `.ux/` already exists.
+Note every app (path, stack, platforms, theme candidates), whether it's a monorepo, and whether `.ux/` already exists. Projects under "Without UI" do not go in `apps:`; mention them and the reason in the init report.
 
 ## 2. Mode
 - **No `.ux/`** → *create* (continue with step 3).
@@ -29,7 +29,7 @@ Note every app (path, stack, platforms, theme candidates), whether it's a monore
   5. Never modify `.ux/standard/` here — that is ux-discover's job. Write a sync note to `.ux/reports/YYYY-MM-DD-ux-init-sync.md` and stop.
 
 ## 3. Create
-Copy from `ASSETS` (use the platform's copy command; on Windows PowerShell `Copy-Item -Recurse`):
+Copy from `ASSETS` (bash: `cp -r`; PowerShell: `Copy-Item -Recurse`):
 ```
 ASSETS/knowledge/            → .ux/knowledge/
 ASSETS/scripts/              → .ux/scripts/
@@ -39,12 +39,16 @@ ASSETS/templates/reports/    → .ux/reports/               (contains _template.
 ```
 Then fill in:
 1. **config.yaml**: project name (from the root manifest — package.json `name`, composer.json, settings.gradle `rootProject.name`, pom `artifactId` — else the folder name), `type` (`existing` if any detected app already has product screens or components; `new` if no app was detected or the code is only a framework starter; if unclear, ask once), `language` (the conversation language), `platforms` (union of detected), `apps` with path/stack/platforms/theme for every detected app (`theme: null` when none was found; several stacks joined with ` + `). Leave `severity`, `exceptions`, `integrations` empty.
-2. **Existing project → tokens.json**: open the real theme files (Tailwind `@theme`/config, CSS variables, MUI `createTheme`, Compose `Theme.kt`/`Color.kt`/`Type.kt`, Flutter `ThemeData`, SwiftUI assets/colors, XAML resource dictionaries, Java L&F, QML theme…). Extract the values actually used into the DTCG structure (primitive → semantic, light/dark if present) and declare contrast pairs in `$extensions["ux-kit.contrast-pairs"]`. Do not invent values; if several apps disagree, keep the most used and list the differences for ux-discover. Validate:
+2. **Existing project → tokens.json**: for Tailwind, CSS variables or MUI, generate a first version over the copied template (`--from-css` and `--from-mui` work the same way and can be combined):
    ```bash
-   node .ux/scripts/tokens.mjs .ux/standard/tokens.json
+   node .ux/scripts/tokens.mjs --from-tailwind <tailwind-config> --out .ux/standard/tokens.json
    ```
-   Report failing contrast pairs as team decisions; propose the nearest passing value with `node .ux/scripts/contrast.mjs <fg> <bg> --suggest`.
-   When values were extracted, set `$extensions["ux-kit.status"]` to `"extracted"`.
+   It reads the files as text and never runs them, removes `semantic.dark` when the source has no dark theme, and marks sections it could not find as `placeholder` in `$extensions["ux-kit.status-by-section"]`. Check the roles and values it reports as missing or unreadable, and complete them from the code. For any other stack open the real theme files (Compose `Theme.kt`/`Color.kt`/`Type.kt`, Flutter `ThemeData`, SwiftUI assets/colors, XAML resource dictionaries, Java L&F, QML theme…). Extract the values actually used into the DTCG structure (primitive → semantic, light/dark if present) and declare contrast pairs in `$extensions["ux-kit.contrast-pairs"]`. Do not invent values; if several apps disagree, keep the most used and list the differences for ux-discover. Keep translucent colors translucent: `{"colorSpace":"srgb","components":[r,g,b],"alpha":a}` with components from 0 to 1; a pair with a translucent `bg` can name the token underneath in `"over"`. Validate:
+   ```bash
+   node .ux/scripts/tokens.mjs .ux/standard/tokens.json --suggest
+   ```
+   Report failing contrast pairs as team decisions, with the nearest passing value that `--suggest` prints. Pairs whose mode was removed (no dark theme) are skipped with a note.
+   When values were extracted, set `$extensions["ux-kit.status"]` to `"extracted"`. If only some sections were extracted, list the others in `$extensions["ux-kit.status-by-section"]`, e.g. `{"primitive.space": "placeholder"}`.
    **No theme files found** (only literals scattered in code): keep the template values, leave `ux-kit.status` as `"placeholder"`, and list the most used literal colors/sizes (from `node .ux/scripts/scan.mjs <repo> --json` → `inventory`) in the init report for ux-discover to decide. Do not promote literals to tokens yourself.
 3. **New project**: leave tokens as placeholders (`ux-kit.status: "placeholder"`) — ux-discover defines the brand.
 4. **CHANGELOG.md**: set version 0.1.0 with today's date; requested by "ux-init (automatic)", reason "initial setup".
