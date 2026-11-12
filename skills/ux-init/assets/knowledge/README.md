@@ -7,8 +7,8 @@ Load only what the task needs.
 | File | Read when |
 |---|---|
 | `severity.md` | **Always before reporting.** Levels, fixed base, configurable rule ids, verdict, finding format |
-| `laws-of-ux.md` | Layout, navigation, number of options, grouping, flows |
-| `myths.md` | Before turning a law into a hard limit; what not to recommend |
+| `laws-of-ux.md` | Laws beyond the 6 core ones (those live in the `ux-laws` skill): grouping, attention, memory, cognitive load, timing |
+| `myths.md` | What not to recommend; the ux-laws limits are the team's standard, not myths |
 | `nielsen-heuristics.md` | Usability review, heuristic evaluation |
 | `accessibility.md` | Contrast, focus, keyboard, screen readers, target size, regulations |
 | `platforms.md` | Material 3, Apple HIG, Fluent 2, web, desktop conventions; touch sizes |

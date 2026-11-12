@@ -14,7 +14,10 @@
 {{3–5 sentences: most serious, what is good, recommended priority.}}
 
 ## Findings
-{{### [ID] Title — level / Where / Rule / Evidence / Impact / Fix}}
+{{### [ID] Title — level / Where / Rule id · Law (e.g. `fitts-spacing · Fitts`) / Evidence / Impact / Fix}}
+
+## ux-laws checklist
+{{Per screen or component: the ux-laws checklist marked ✅ met · ❌ failed · ⚠️ suggestion not met · ❔ not verifiable from code}}
 
 ## ✅ What passes
 ## ❔ To verify

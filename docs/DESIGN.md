@@ -1,6 +1,6 @@
 # ux-kit — Documento de diseño
 
-> Estado: **borrador para revisión** · Versión del documento: 0.4 (alineado con la implementación v0.1) · Licencia del proyecto: MIT
+> Estado: **borrador para revisión** · Versión del documento: 0.5 (alineado con la implementación v0.2) · Licencia del proyecto: MIT
 > Este documento está en español para la revisión inicial. En el repositorio público, las skills irán en inglés y el README en inglés y español.
 
 ---
@@ -20,8 +20,8 @@
 2. **Independiente de la metodología.** El núcleo no sabe si usas OpenSpec, Scrum o nada. Las integraciones con metodologías son skills opcionales.
 3. **Independiente del stack.** Las reglas se expresan como criterios; cómo verificarlas en cada tecnología (HTML/CSS, Tailwind, React, Compose, SwiftUI, Flutter, Java, C#, C++…) va en guías por stack. Lo que el escáner no cubre, lo revisa el agente leyendo el código.
 4. **El proyecto define su estándar.** Todo se mide contra `.ux/` del proyecto. El conocimiento general solo rellena lo que el proyecto no define.
-5. **Evidencia antes que dogma.** Las leyes UX se usan para justificar decisiones y detectar riesgos, no como límites numéricos. Los bloqueos se basan en criterios medibles. Ver §9.
-6. **El humano decide.** Las revisiones avisan y preguntan si corregir; no bloquean el trabajo. Lo que se implementa es decisión del equipo.
+5. **Evidencia o estándar explícito.** Las 6 leyes de `ux-laws` (Fitts, Hick, Jakob, Miller, apogeo y final, estética-usabilidad) son el estándar del equipo, con límites numéricos (7 opciones, 44 px, 8 px, 4 tamaños de letra). Se citan como regla del proyecto, no como ley universal, y cada una tiene un id de severidad configurable. Las demás leyes justifican decisiones y detectan riesgos. Ver §9.
+6. **El humano decide.** Un blocker detiene la entrega: el agente lo corrige antes de dar el cambio por terminado. El equipo puede bajar cualquier regla configurable o aprobar una excepción. Lo que se implementa es decisión del equipo.
 7. **Liviano por defecto.** Revisiones rápidas sobre lo que cambió; las auditorías completas son explícitas, para no gastar tokens de más.
 
 ## 3. Dónde encaja en el ciclo de desarrollo
@@ -87,7 +87,7 @@ El estándar no es fijo: puede llegar un rediseño de marca, un perfil de usuari
 
 Modelo tomado de OpenSpec: CLI propia + skills generadas por agente, con perfiles.
 
-### 5.1 CLI npm (camino principal, desde v0.2)
+### 5.1 CLI npm (camino principal, desde v0.3)
 ```bash
 npm install -g ux-kit           # o: npx ux-kit <comando>
 ux-kit init                     # agentes · integraciones · nuevo/existente · perfil
@@ -111,7 +111,7 @@ Luego, dentro del agente, `ux-init` crea `.ux/`. La CLI `skills` (skills.sh) det
 ### 5.3 Perfiles
 | Perfil | Skills |
 |---|---|
-| **core** (por defecto) | `ux-guide` · `ux-init` · `ux-discover` · `ux-plan-review` · `ux-check` |
+| **core** (por defecto) | `ux-laws` · `ux-guide` · `ux-init` · `ux-discover` · `ux-plan-review` · `ux-check` |
 | **expanded** | core + `ux-check-ux` · `ux-check-ui` · `ux-check-design` · `ux-check-a11y` · `ux-audit` · `ux-retro` |
 | **integraciones** (se eligen aparte) | `ux-openspec` · `ux-scrum` · `ux-log` |
 
@@ -124,6 +124,7 @@ Las skills se instalan por separado, así que **ninguna skill depende de archivo
 
 | Skill | Perfil | Se activa | Lee | Produce |
 |---|---|---|---|---|
+| `ux-laws` | core | Sola, siempre que se diseña, construye o revisa UI | Sus propias referencias (`references/`); `.ux/config.yaml` si existe | Declaración de leyes antes de codear; checklist ✅/❌/⚠️ antes de entregar |
 | `ux-guide` | core | Sola, cuando el agente planifica o construye UI | `.ux/config.yaml`, `standard/`, `knowledge/` | Puntos UX a considerar en el plan; aplicación del estándar al construir |
 | `ux-init` | core | Manual (primera vez; repetirlo sincroniza) | Código del proyecto | `.ux/` completo; en proyectos existentes, `tokens.json` extraído; en monorepos, la sección `apps` |
 | `ux-discover` | core | Manual (crear o actualizar por partes) | Conversación, código, web (si el agente puede buscar) | `standard/users.md`, `references.md`, `user-questions.md`, `brand.md`, `tokens.json`; entrada en `CHANGELOG.md` y análisis de impacto al actualizar |
@@ -209,8 +210,8 @@ integrations:
 
 | Archivo | Contenido |
 |---|---|
-| `laws-of-ux.md` | Las 30 leyes (lawsofux.com): qué dicen, cómo aplicarlas, cómo auditarlas, malos usos |
-| `myths.md` | Mitos y malas aplicaciones (7±2 en menús, "3 clics", wizard por cantidad de campos…) |
+| `laws-of-ux.md` | Las leyes de lawsofux.com que no están en `ux-laws`: qué dicen, cómo aplicarlas, cómo auditarlas, malos usos |
+| `myths.md` | Mitos y malas aplicaciones ("3 clics", "la gente no hace scroll"…); aclara que los límites de `ux-laws` son estándar del equipo |
 | `nielsen-heuristics.md` | 10 heurísticas con preguntas de evaluación |
 | `accessibility.md` | WCAG 2.2 A/AA por principio, criterios nuevos de 2.2, APIs por plataforma, estado de WCAG 3 y APCA, normativa |
 | `platforms.md` | Material 3 / Expressive, Apple HIG / Liquid Glass, Fluent 2, web, escritorio multiplataforma |
@@ -233,13 +234,13 @@ Niveles: **bloqueante · mayor · menor · sugerencia** (+ *no verificable*).
 - Patrones oscuros confirmados.
 - Riesgo de pérdida de datos del usuario (acción destructiva sin confirmación ni deshacer, formulario que se vacía tras un error).
 
-**Configurable en `config.yaml`**: todo lo demás (tamaños táctiles de plataforma, uso de tokens, estados vacíos, convenciones de plataforma, microcopy…), con valores por defecto razonables.
+**Configurable en `config.yaml`**: todo lo demás (tamaños táctiles de plataforma, uso de tokens, estados vacíos, convenciones de plataforma, microcopy…), con valores por defecto razonables. Las reglas de `ux-laws` (Fitts y Hick) son bloqueantes por defecto; Jakob, Miller, apogeo y final y estética-usabilidad, sugerencias.
 
-**Veredicto de cada revisión**: no apto (≥1 bloqueante) · apto con observaciones (≥1 mayor) · apto. El veredicto informa; no bloquea el trabajo (principio 6).
+**Veredicto de cada revisión**: no apto (≥1 bloqueante) · apto con observaciones (≥1 mayor) · apto. Un bloqueante significa que el cambio no está terminado: el agente lo corrige antes de entregarlo, salvo que el equipo haya bajado la regla o aprobado una excepción (principio 6).
 
 ## 10. Scripts (Node.js)
 
-En v0.1 viven en `skills/ux-init/assets/scripts/`, se copian a `.ux/scripts/` y se ejecutan con `node .ux/scripts/<script>.mjs`. Desde v0.2 también se publican en el paquete npm `ux-kit` (`npx ux-kit …`) para la terminal y CI.
+En v0.1 viven en `skills/ux-init/assets/scripts/`, se copian a `.ux/scripts/` y se ejecutan con `node .ux/scripts/<script>.mjs`. Desde v0.3 también se publican en el paquete npm `ux-kit` (`npx ux-kit …`) para la terminal y CI.
 
 | Comando | Qué hace |
 |---|---|
@@ -267,7 +268,7 @@ ux-kit/
 │   └── ux-openspec/  ux-scrum/  ux-log/
 ├── knowledge/                   se copia a .ux/knowledge/
 ├── templates/                   plantillas de .ux/ y de reportes
-├── packages/cli/                paquete npm ux-kit (desde v0.2)
+├── packages/cli/                paquete npm ux-kit (desde v0.3)
 └── tests/fixtures/              proyectos de prueba con errores sembrados por stack
 ```
 
@@ -276,8 +277,9 @@ ux-kit/
 | Versión | Contenido | Instalación |
 |---|---|---|
 | **v0.1** | Skills core, `knowledge/`, plantillas de `.ux/`, scripts dentro de las skills | `npx skills add` |
-| **v0.2** | CLI npm (`init`, `update`, `check`, `profile`), perfil expanded | `npm i -g ux-kit` o `npx` |
-| **v0.3** | Integraciones (`ux-openspec`, `ux-scrum`, `ux-log`), GitHub Action para CI | ambas |
+| **v0.2** | `ux-laws`: las 6 leyes UX con referencias a fondo, checklist y reglas bloqueantes configurables | `npx skills add` |
+| **v0.3** | CLI npm (`init`, `update`, `check`, `profile`), perfil expanded | `npm i -g ux-kit` o `npx` |
+| **v0.4** | Integraciones (`ux-openspec`, `ux-scrum`, `ux-log`), GitHub Action para CI | ambas |
 
 ## 13. Cómo contribuir (resumen)
 
@@ -301,4 +303,4 @@ El borrador anterior (`ux-spec`) ya tiene contenido que se puede traducir y reor
 ## 16. Notas de implementación v0.1
 - Nombres de archivo del estándar en inglés (`users.md`, `references.md`, `user-questions.md`, `brand.md`); su contenido se escribe en `config.yaml → project.language`.
 - Valores por defecto para las preguntas abiertas de §14: sin búsqueda web, `references.md` se arma con links o capturas del usuario; sin git, se pide la lista de archivos; reportes en el idioma del proyecto; nombre npm y organización de GitHub se definen al publicar.
-- `ux-audit` llega en v0.2; mientras tanto, la línea base de un proyecto existente es `ux-check` sobre todo el proyecto.
+- `ux-audit` llega en v0.3; mientras tanto, la línea base de un proyecto existente es `ux-check` sobre todo el proyecto.

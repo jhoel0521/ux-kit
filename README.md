@@ -2,13 +2,13 @@
 
 **UX/UI quality layer for AI coding agents.** Gives your agent the knowledge and tools to consider usability, accessibility, visual design and platform conventions when it plans, builds and reviews interfaces — measured against **your project's own standard**.
 
-[Español](README.es.md) · License: MIT · Status: v0.1 (early, feedback welcome)
+[Español](README.es.md) · License: MIT · Status: v0.2 (early, feedback welcome)
 
 - **Agent-agnostic** — standard `SKILL.md` skills: Claude Code, Codex, OpenCode, Cursor, GitHub Copilot, Gemini CLI and any compatible agent.
 - **Methodology-agnostic** — works alone or next to OpenSpec, Spec Kit, Scrum, Kanban… It has no workflow of its own.
 - **Stack-agnostic** — web, Android, iOS, desktop, Flutter, React Native, Java, .NET, Qt. Scanner for common stacks; guides for the rest.
 - **Your standard first** — users, brand and tokens live in `.ux/` and everything is checked against them.
-- **Advisory, not blocking** — it informs and asks; your team decides.
+- **Your rules, enforced** — the 6 core UX laws (Fitts, Hick, Jakob, Miller, Peak-End, Aesthetic-Usability) are a checklist with blocking rules; your team can lower any rule or approve exceptions.
 
 ## Install
 
@@ -25,17 +25,29 @@ ux-discover   → defines users, references, interview questions, brand and toke
 ```
 (Claude Code: `/ux-init`; Codex: `$ux-init`; others: ask the agent to "run ux-init".)
 
-## Skills (v0.1 — core)
+## Update
+
+```bash
+npx skills add jhoel0521/ux-kit --skill '*' -a claude-code -y   # every skill, one agent: adds new ones (ux-laws), replaces the rest
+npx skills update -p                       # refreshes project skills installed from GitHub
+```
+`--all` does the same for every agent the CLI knows. `add` replaces an existing skill folder, including a hand-made copy.
+Then run `ux-init` in each project: it refreshes `.ux/knowledge/` and `.ux/scripts/` and never touches `.ux/standard/`.
+
+Coming from the old `leyes-ux` skill: delete its folder (`.claude/skills/leyes-ux` or `.agents/skills/leyes-ux`) before updating. `ux-laws` replaces it, and two skills with the same rules confuse the agent.
+
+## Skills (v0.2 — core)
 
 | Skill | When | What it does |
 |---|---|---|
+| `ux-laws` | Automatically, whenever UI is designed, built or reviewed | The 6 core laws (Fitts, Hick, Jakob, Miller, Peak-End, Aesthetic-Usability) with deep references: declare them before coding, checklist before delivering. Fitts and Hick are blocking |
 | `ux-guide` | Automatically, when the agent plans or builds UI | Adds UX/UI considerations to any plan; applies the standard while building; triggers `ux-check` at the end |
 | `ux-init` | Once; re-run to sync | Creates/syncs `.ux/`; detects apps (monorepos too) and framework migrations |
 | `ux-discover` | Start of a product, redesigns, brand/user changes | Defines or updates the standard by parts; versioned CHANGELOG; impact analysis |
 | `ux-plan-review` | Before approving a plan | Reviews any plan (OpenSpec change, plan mode, TASKS.md…) and asks whether to amend it |
 | `ux-check` | After a UI change | Light review of changed visual files (any language) against the standard; drift detection |
 
-Coming next: `ux-check-ux`, `ux-check-ui`, `ux-check-design`, `ux-check-a11y`, `ux-audit`, `ux-retro` (v0.2, with an npm CLI); integrations `ux-openspec`, `ux-scrum`, `ux-log` (v0.3). See [docs/DESIGN.md](docs/DESIGN.md).
+Coming next: `ux-check-ux`, `ux-check-ui`, `ux-check-design`, `ux-check-a11y`, `ux-audit`, `ux-retro` (v0.3, with an npm CLI); integrations `ux-openspec`, `ux-scrum`, `ux-log` (v0.4). See [docs/DESIGN.md](docs/DESIGN.md).
 
 ## How it fits a development cycle
 

@@ -4,7 +4,7 @@ description: Review an agent's plan from the UX/UI point of view before the huma
 license: MIT
 compatibility: Any agent supporting SKILL.md. Uses .ux/ from ux-init when present.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   profile: core
   kit: ux-kit
 ---
@@ -31,7 +31,7 @@ For each point, decide: covered ✅ · missing or weak (with severity) · not ap
 9. **Risk** — destructive actions, payments/consents (dark patterns), data loss.
 10. **Performance** — feedback for slow operations, long lists.
 11. **Verification** — a task to run ux-check after implementation.
-Check laws only to justify gaps; never request changes based on myths (`myths.md`).
+Check that the plan declares the ux-laws blocking laws (Hick: primary options per screen; Fitts: targets with size and zone) and how each flow ends (Peak-End). A missing declaration is a finding; a plan that breaks a blocking rule is a blocker unless `config.yaml` lowers it. Don't request changes based on the myths in `myths.md`.
 
 ## 3. Report and ask
 Write findings with prefix `PLAN-` in the format of `severity.md`, most important first, each with a concrete addition to the plan (the sentence or task to add). Then ask: **"Do you want me to add these to the plan?"** (all, some by ID, or none).

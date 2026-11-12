@@ -363,6 +363,46 @@ test('tokens --from-*: bad input is a usage error', () => {
   });
 });
 
+const skillText = (...parts) => readFileSync(join(ROOT, 'skills', ...parts), 'utf8').replace(/\r\n/g, '\n');
+const CHECKLIST = /<!-- ux-laws:checklist:start -->[\s\S]*?<!-- ux-laws:checklist:end -->/;
+
+test('ux-laws: ux-check carries the same checklist', () => {
+  const laws = skillText('ux-laws', 'SKILL.md').match(CHECKLIST);
+  const check = skillText('ux-check', 'SKILL.md').match(CHECKLIST);
+  assert.ok(laws && check, 'checklist markers missing');
+  assert.equal(check[0], laws[0]);
+});
+
+test('ux-laws: every rule id it cites is configurable in severity.md', () => {
+  const severity = skillText('ux-init', 'assets', 'knowledge', 'severity.md');
+  const configurable = new Set([...severity.matchAll(/^\| `([a-z0-9-]+)` \| (?:blocker|major|minor|suggestion) \|/gm)].map((m) => m[1]));
+  const files = ['SKILL.md', ...readdirSync(join(ROOT, 'skills', 'ux-laws', 'references')).map((f) => `references/${f}`)];
+  const cited = new Set();
+  for (const file of files) {
+    const text = skillText('ux-laws', ...file.split('/'));
+    for (const m of text.matchAll(/rule ids? ((?:`[a-z0-9-]+`(?:, )?)+)/g)) for (const id of m[1].matchAll(/`([a-z0-9-]+)`/g)) cited.add(id[1]);
+    for (const line of (text.match(CHECKLIST)?.[0] ?? '').split('\n')) { const id = line.match(/\s([a-z]+(?:-[a-z]+)+)$/); if (id && line.startsWith('[ ]')) cited.add(id[1]); }
+  }
+  assert.ok(cited.size >= 10, `only ${cited.size} ids found`);
+  for (const id of cited) assert.ok(configurable.has(id), `${id} is not in severity.md`);
+});
+
+test('ux-laws: references listed in SKILL.md exist and nothing points outside the kit', () => {
+  const skill = skillText('ux-laws', 'SKILL.md');
+  const listed = new Set([...skill.matchAll(/`references\/([\w-]+\.md)`/g)].map((m) => m[1]));
+  assert.deepEqual([...listed].sort(), readdirSync(join(ROOT, 'skills', 'ux-laws', 'references')).sort());
+  for (const skillName of readdirSync(join(ROOT, 'skills'))) {
+    assert.doesNotMatch(skillText(skillName, 'SKILL.md'), /frontend-clean-architecture|laravel-backend/, skillName);
+  }
+});
+
+test('ux-laws: the team rules are not called myths', () => {
+  const myths = skillText('ux-init', 'assets', 'knowledge', 'myths.md');
+  assert.doesNotMatch(myths, /\| "(?:Max 7|More than 7|Form with > 7)/);
+  assert.doesNotMatch(skillText('ux-guide', 'SKILL.md'), /never turn laws into numeric limits/);
+  assert.doesNotMatch(skillText('ux-check', 'SKILL.md'), /Never block/);
+});
+
 test('scan --list-changed: keeps file names with accents', () => {
   withRepo((dir) => {
     write(dir, 'Producción.html', IMG);

@@ -2,12 +2,11 @@
 
 Check this before reporting "violates law X". Repeating myths costs credibility and leads teams to worse decisions.
 
+The numeric limits of `ux-laws` (7 primary options, forms with more than 7 fields split into steps or sections, 44px targets, 8/16px spacing, 4 type sizes) are **not** myths here: they are the team's standard. Apply them as project rules and cite them by their rule id; don't present them as universal science.
+
 ## UX-law myths
 | Myth | Reality | Do instead |
 |---|---|---|
-| "Max 7±2 items in a menu" (Miller) | Miller is about holding in memory what is **not visible**. A visible menu is scanned. NN/g lists this as a classic misuse | Group by meaning and frequency; validate with tree testing |
-| "More than 7 options is a blocker" (Hick) | Hick models decisions among equally likely options. With clear categories or search people don't evaluate them all | Highlight recommended/frequent options, order logically, add search to long lists |
-| "Form with > 7 fields ⇒ multi-step wizard" | Wizards add clicks, hide context and make review harder. Baymard finds the number of fields matters more than the number of steps | First **remove** fields, then group into sections. Use steps only for dependencies, long tasks worth saving midway, or natural stages |
 | "3-click rule" | No empirical support (Porter 2003; NN/g): satisfaction depends on each click being obvious | Improve information scent |
 | "People don't scroll" | False for over a decade; people scroll when there are cues of more content | Avoid false bottoms; keep the most important content high |
 | "Beautiful = usable" | Aesthetics raise *perceived* usability, not actual usability | Measure success and errors, not only opinion |

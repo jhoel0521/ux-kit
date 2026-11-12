@@ -4,7 +4,7 @@ description: UX/UI quality guidance the agent applies by itself whenever it plan
 license: MIT
 compatibility: Any agent supporting SKILL.md. Uses the project folder .ux/ created by ux-init; works with reduced guidance without it.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   profile: core
   kit: ux-kit
 ---
@@ -20,7 +20,7 @@ You are planning or building UI. This skill keeps UX/UI quality in mind without 
 - **Facts drift**: if the code you are touching clearly uses a different stack/theme than `config.yaml` says for that app, note it in one line and update the fact (stack, theme path) — do not stop the work. In a read-only session (plan mode, read-only sandbox) only note it. Decisions (users, levels, exceptions) are never changed silently.
 
 ## 1. When planning or proposing changes
-Add a short "UX/UI considerations" part to the plan you are writing (wherever the plan lives: a proposal, design doc, task list, plan-mode output). Cover only what applies:
+Add a short "UX/UI considerations" part to the plan you are writing (wherever the plan lives: a proposal, design doc, task list, plan-mode output). It starts with the **ux-laws** declaration: how many primary options each screen has (Hick, at most 7) and its touch targets with size and zone (Fitts), plus a line for Miller and Peak-End when they apply. Then cover only what applies:
 1. **Who and where**: which user profile(s) from `users.md`, context (device, one hand, gloves, desktop heavy use).
 2. **Flow**: steps from start to end; the primary action per screen (one); how the flow ends (confirmation + next step).
 3. **States**: loading, empty (first use / no results), error with recovery, success, offline, no permission.
@@ -36,7 +36,7 @@ Keep it proportional: a small button change needs two lines, a new module needs 
 ## 2. When building
 Follow the standard first, then these defaults (details in `.ux/knowledge/` when it exists):
 1. Use the project's tokens/theme; no literal colors, sizes or spacing in components.
-2. Targets: ≥ 24×24 CSS px always (WCAG 2.5.8); touch ≥ 44pt iOS / 48dp Android / ~40epx Windows for anything important.
+2. Targets: ≥ 24×24 CSS px always (WCAG 2.5.8); every touch target ≥ 44pt iOS / 48dp Android / 44px on web shown on phones / ~40epx Windows touch, with ≥ 8px between them and ≥ 16px between opposite actions (ux-laws, Fitts).
 3. Contrast: text ≥ 4.5:1 (large ≥ 3:1), UI parts and focus ≥ 3:1, in every theme.
 4. Visible focus and full keyboard operation on web/desktop; never remove outlines without replacement.
 5. Native semantics first (real buttons/links/labels; platform accessibility APIs for custom controls).
@@ -46,7 +46,7 @@ Follow the standard first, then these defaults (details in `.ux/knowledge/` when
 9. Feedback < 100 ms; indicator > 400 ms; skeleton/progress > 1 s; progress + cancel > 10 s.
 10. No dark patterns.
 
-When a law or heuristic justifies a decision, name it briefly — never turn laws into numeric limits (read `.ux/knowledge/myths.md` if tempted).
+Apply **ux-laws** while building: Fitts and Hick are blocking, Jakob, Miller, Peak-End and Aesthetic-Usability are conscious decisions. Name the law (and its rule id) when it justifies a decision.
 
 ## 3. When the UI change is done
 If `check.after_change` is true (default) or the user asks, run **ux-check** on the changed files before declaring the work finished. It is light: it only looks at changed visual files. Without `.ux/` it still runs, with reduced defaults.

@@ -1,11 +1,11 @@
-# The 30 laws of UX — how to apply and audit them
+# More laws of UX — how to apply and audit them
+
+**The 6 core laws — Fitts, Hick, Jakob, Miller, Peak-End (apogeo y final) and Aesthetic-Usability — live in the `ux-laws` skill**, with their rules, checklists and severity ids. This file covers the other laws, which support reasoning and findings.
 
 Base catalogue: Jon Yablonski, lawsofux.com, plus the original research. For each law: **says**, **apply**, **audit**, **careful** (common misuse). "Weight" says how strong the evidence is as an audit criterion:
-- **high** — robust empirical model, measurable (Fitts, Doherty, Peak-End, Gestalt).
-- **medium** — real but context-dependent (Hick, Jakob, Von Restorff, goal-gradient).
+- **high** — robust empirical model, measurable (Doherty, Gestalt).
+- **medium** — real but context-dependent (Von Restorff, goal-gradient).
 - **guide** — useful for reasoning, not for pass/fail (Occam, Pareto, Parkinson, Tesler).
-
-Before turning any law into a numeric limit, read `myths.md`.
 
 ## 1. Perception and grouping (Gestalt)
 
@@ -29,7 +29,7 @@ Before turning any law into a numeric limit, read `myths.md`.
 
 **Working memory — high.** Temporary, limited (~4 chunks, Cowan 2001). Apply: recognition over recall; keep context visible; never make users carry data between screens (also WCAG 3.3.7). Audit: users must remember a code or option from a previous step.
 
-**Miller's law (7±2) — medium, heavily misused.** Short-term memory holds about 7±2 items (Miller 1956); later research says closer to 4±1 chunks. Apply to information users must **hold in mind without seeing it**: codes, long numbers, multi-step instructions. Do **not** apply to visible menus or lists — they are scanned, not memorized. Audit: asking users to remember > ~4 things; long numbers without grouping.
+Miller's law → `ux-laws` (`references/miller.md`).
 
 **Chunking — high.** Grouping into meaningful units eases processing. Apply: `7123 4567`, `4532 7890 1234 5678`; sections with headings; short paragraphs. Audit: walls of text, unformatted long numbers, long forms without sections.
 
@@ -39,7 +39,7 @@ Before turning any law into a numeric limit, read `myths.md`.
 
 **Cognitive load — high.** Mental effort to use an interface: intrinsic (the task) vs extraneous (the UI). Only the extraneous is our fault. Apply: remove decoration that does not inform, smart defaults, progressive disclosure, user vocabulary. Audit: elements not helping the task, internal jargon, decisions the system could make.
 
-**Hick–Hyman law — medium.** Decision time grows logarithmically with the number of **equally likely** options and their complexity. Apply: for simple, frequent decisions (CTA, plan choice) prioritize, highlight the recommended option, group the rest, hide advanced ones. Do **not** use as a universal "7 options" limit: in well-categorized menus people search, they don't decide among all. Audit: several actions with the same weight and no recommended one; rare options competing with frequent ones.
+Hick's law → `ux-laws` (`references/hick.md`).
 
 **Choice overload — medium.** Too many options can paralyze; evidence is mixed (Scheibehenne et al. 2010) and appears when options are hard to compare. Apply: filters, comparison, "recommended", defaults.
 
@@ -53,13 +53,7 @@ Before turning any law into a numeric limit, read `myths.md`.
 
 ## 4. Motor control and time
 
-**Fitts's law — high.** `T = a + b·log2(D/W + 1)`: time grows with distance and shrinks with target size. Apply:
-- Minimum sizes (see `platforms.md`): WCAG 2.5.8 24×24 CSS px · iOS 44×44 pt · Android 48×48 dp · Windows touch ~40×40 epx.
-- Hit area can exceed the visual (padding, pseudo-elements, `minimumInteractiveComponentSize`, `contentShape`).
-- Clickable labels for checkboxes/radios; whole list rows clickable.
-- Screen edges/corners are "infinite" targets for mouse.
-- One-handed mobile: frequent actions in the thumb zone; destructive actions away from frequent ones.
-Audit: measure (render script) or read sizes in code; opposite actions glued together (Save/Delete). Careful: making destructive actions huge and easy.
+Fitts's law → `ux-laws` (`references/fitts.md`). Per-platform sizes and APIs that enlarge the hit area: `platforms.md` and `stacks/<stack>.md`.
 
 **Doherty threshold — high.** Productivity soars when system and user interact in < 400 ms (Doherty & Thadani, IBM 1982). Response limits (Nielsen): 0.1 s instant · 1 s keeps flow · 10 s attention limit. Apply: immediate press feedback, optimistic UI for reversible actions, skeletons, progress for long tasks (see `performance.md`). Audit: buttons without pressed/loading state; clicks that show nothing for 2 s.
 
@@ -67,7 +61,7 @@ Audit: measure (render script) or read sizes in code; opposite actions glued tog
 
 ## 5. Expectations and behavior
 
-**Jakob's law — medium.** Users spend most of their time on other products and expect yours to work the same. Apply: platform conventions (back, tabs, gestures, settings location, standard icons), familiar e-commerce/form patterns; change redesigns gradually. Audit: invented icons for standard actions, non-standard gestures without visible alternative, logo not going home, iOS patterns on Android or vice versa. Careful: Jakob doesn't forbid innovation; innovation must pay its learning cost.
+Jakob's law → `ux-laws` (`references/jakob.md`). Platform conventions: `platforms.md`.
 
 **Paradox of the active user — high.** Users don't read manuals; they start using right away. Apply: contextual help, empty states that teach, skippable onboarding, learn by doing. Audit: mandatory multi-screen tours; critical features only discoverable in docs.
 
@@ -77,22 +71,20 @@ Audit: measure (render script) or read sizes in code; opposite actions glued tog
 
 ## 6. Emotion and motivation
 
-**Aesthetic–usability effect — medium.** Attractive designs are perceived as easier to use and make people tolerate minor issues (Kurosu & Kashimura 1995). Apply: invest in visual consistency, spacing rhythm, typography, micro-interactions. Careful: it **masks problems in usability tests** (people say it is easy while failing) — measure task success, not just opinion. Aesthetics never justify low contrast.
-
-**Peak–end rule — high.** Experiences are judged by their most intense moment and their end (Kahneman et al. 1993). Apply: identify the emotional peak (achievement, or error/wait/payment rejection) and the end of each flow; design both: success screen with summary and next step, empathetic errors with a way out. Audit: flow ends in a 2-second toast; worst moment has a generic message; data lost after an error.
+Aesthetic-usability effect and Peak-End rule (apogeo y final) → `ux-laws` (`references/aesthetic-usability.md`, `references/peak-end.md`).
 
 **Goal-gradient effect — medium.** Effort increases near the goal (Hull 1932; Kivetz et al. 2006). Apply: progress bars in multi-step flows showing real progress. Careful: fake or backwards progress destroys trust.
 
 **Flow — medium.** Full immersion when challenge matches skill (Csikszentmihalyi). Apply: minimal interruptions, immediate feedback, shortcuts for experts (keyboard on desktop, gestures on mobile). Audit: modals interrupting frequent tasks; no shortcuts in a heavy-use desktop app.
 
-## Symptom → laws to check
+## Symptom → laws to check (laws marked * are in `ux-laws`)
 | Symptom | Laws |
 |---|---|
-| "I don't know what to do here" | Von Restorff, Hick, cognitive load, Jakob |
-| "I can't find X" | Mental model, Jakob, serial position, selective attention |
-| "I tapped the wrong button" | Fitts, proximity |
-| "It looks messy" | Proximity, common region, similarity, Prägnanz, aesthetic–usability |
-| "It feels slow" | Doherty, peak–end |
-| "People abandon the form" | Tesler, Postel, goal-gradient, working memory, cognitive load |
-| "They don't finish onboarding" | Active user paradox, Zeigarnik, goal-gradient |
-| "They complain about the redesign" | Jakob, mental model |
+| "I don't know what to do here" | Von Restorff, Hick*, cognitive load, Jakob* |
+| "I can't find X" | Mental model, Jakob*, serial position, selective attention |
+| "I tapped the wrong button" | Fitts*, proximity |
+| "It looks messy" | Proximity, common region, similarity, Prägnanz, aesthetic-usability* |
+| "It feels slow" | Doherty, peak-end* |
+| "People abandon the form" | Hick*, Miller*, Tesler, Postel, goal-gradient, working memory, cognitive load |
+| "They don't finish onboarding" | Active user paradox, Zeigarnik, goal-gradient, peak-end* |
+| "They complain about the redesign" | Jakob*, mental model |
