@@ -61,6 +61,6 @@ Then fill in:
 6. Suggest adding `.ux/reports/render/` to `.gitignore` (screenshots); everything else in `.ux/` should be committed.
 
 ## 4. Close
-Write `.ux/reports/YYYY-MM-DD-ux-init.md` (detected apps, what was created, tokens status, contrast failures, assumptions made and questions left for the team). Then summarize in the conversation language: apps detected, files created, tokens extracted (and contrast failures), assumptions made. Next steps:
+Write `.ux/reports/YYYY-MM-DD-ux-init.md` (detected apps, what was created, tokens status, contrast failures, assumptions made and questions left for the team). Include the third-party files `scan.mjs` skipped (`thirdPartySkipped`): ask the team to confirm them, and add any copied library it missed to `check.exclude` in `config.yaml`. Then summarize in the conversation language: apps detected, files created, tokens extracted (and contrast failures), assumptions made. Next steps:
 - **New project** → run **ux-discover**.
 - **Existing project** → run **ux-discover** to complete what code can't tell (users, brand, references), then **ux-check** over the whole project for a baseline.

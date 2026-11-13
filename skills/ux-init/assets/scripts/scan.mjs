@@ -7,6 +7,9 @@
 //                                       (--all-lines to include pre-existing ones)
 //   node scan.mjs --list-changed [ref] [paths...]  only print the changed visual files (any language), one per line
 //   Any mode: --include <glob> / --exclude <glob> (repeatable, relative to the current directory; exclude wins).
+//   Inside a git repository a folder is scanned through git: files ignored by .gitignore are skipped (a file passed
+//   explicitly is always scanned). Libraries copied by hand (jquery-ui/, bootstrap*/ folders, or a library banner at
+//   the top of the file) are skipped and listed as third-party; --include-vendor scans them too.
 //   An argument after --changed that is both a ref and a path is an error: write ./name (path) or refs/heads/name (ref).
 // Covers HTML, JSX/TSX, Vue, Svelte, Astro, Blade/Twig/Razor/JSP, CSS/SCSS, Jetpack Compose (.kt), Android XML,
 // SwiftUI (.swift), Flutter (.dart), React Native, XAML, QML, Java Swing/JavaFX.
@@ -17,6 +20,7 @@ import { readdirSync, readFileSync, statSync, existsSync, realpathSync } from 'n
 import { join, relative, extname, basename, resolve, dirname, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { isMain } from './is-main.mjs';
+import { thirdPartyReason } from './third-party.mjs';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'vendor', 'Pods', '.gradle', 'target',
   '.dart_tool', 'coverage', '.venv', 'venv', '__pycache__', '.idea', '.turbo', 'storybook-static', 'DerivedData',
@@ -296,16 +300,29 @@ function auditJava(path, text, ctx, out) {
   for (const m of text.matchAll(/new\s+(?:java\.awt\.)?Color\(\s*\d+\s*,\s*\d+\s*,\s*\d+/g)) if (!isTokenFile(path)) F('JAVA-COLOR-LITERAL', 'minor', m.index, 'Literal Color in UI code: use L&F/theme', 'literal-design-values');
 }
 
+const SKIP_FILE = /\.(min\.js|min\.css|map|d\.ts|lock)$/;
+
 function walk(roots) {
   const out = [];
   for (const r of roots) {
     if (!existsSync(r)) continue;
     if (statSync(r).isFile()) { out.push(r); continue; }
+    // in a git repository, list the folder through git so .gitignore applies (tracked + untracked, not ignored)
+    const top = gitTop(r);
+    const listed = top && git(['ls-files', '--cached', '--others', '--exclude-standard', '--full-name', '-z', '--', '.'], r);
+    if (listed != null) {
+      for (const f of nulList(listed)) {
+        const p = join(top, f), parts = relative(r, p).split(sep);
+        if (parts.slice(0, -1).some((s) => SKIP.has(s) || s.startsWith('.')) || SKIP_FILE.test(parts.at(-1)) || !existsSync(p)) continue;
+        out.push(p);
+      }
+      continue;
+    }
     const st = [r];
     while (st.length) { const d = st.pop(); let ents; try { ents = readdirSync(d, { withFileTypes: true }); } catch { continue; }
       for (const e of ents) { const p = join(d, e.name);
         if (e.isDirectory()) { if (!SKIP.has(e.name) && !e.name.startsWith('.')) st.push(p); }
-        else if (!/\.(min\.js|min\.css|map|d\.ts|lock)$/.test(e.name)) out.push(p); } }
+        else if (!SKIP_FILE.test(e.name)) out.push(p); } }
   }
   return out;
 }
@@ -335,8 +352,11 @@ export function changedFiles(ref = 'HEAD', cwd = '.') {
     .map((f) => join(top, f)).filter((f) => existsSync(f));
 }
 
-export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = null, fileFilter = null } = {}) {
+export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = null, fileFilter = null, includeVendor = false, explicit = null } = {}) {
   const roots = paths.map((p) => resolve(p));
+  // files the user named are always scanned; files found by walking a folder skip third-party libraries
+  const named = explicit ?? new Set(roots.filter((r) => existsSync(r) && statSync(r).isFile()));
+  const thirdParty = [];
   let base = roots.length === 1 ? roots[0] : roots.reduce((a, b) => { while (!b.startsWith(a)) a = dirname(a); return a; });
   if (existsSync(base) && statSync(base).isFile()) base = dirname(base);
   const cwd = process.cwd();
@@ -349,6 +369,10 @@ export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = nul
     let ext = extname(p).toLowerCase(); if (p.endsWith('.blade.php')) ext = '.php';
     if (!(WEB.has(ext) || CSS.has(ext) || OTHER.has(ext))) continue;
     let text; try { if (statSync(p).size > 1_500_000) continue; text = readFileSync(p, 'utf8'); } catch { continue; }
+    if (!includeVendor && !named.has(p)) {
+      const why = thirdPartyReason(ctx.rel(p), text);
+      if (why) { thirdParty.push({ file: ctx.rel(p), reason: why }); continue; }
+    }
     n++;
     if (WEB.has(ext) || CSS.has(ext)) auditWeb(p, text, ctx, findings);
     else if (ext === '.kt') auditKotlin(p, text, ctx, findings);
@@ -380,7 +404,7 @@ export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = nul
   kept.sort((a, b) => SEV[a.sev] - SEV[b.sev] || a.file.localeCompare(b.file) || a.line - b.line);
   const top = (o) => Object.fromEntries(Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 40));
   const counts = Object.fromEntries(Object.keys(SEV).map((s) => [s, findings.filter((f) => f.sev === s).length]));
-  return { filesScanned: n, counts, preexistingNotShown: preexisting, findings: kept, omittedByCap: omitted,
+  return { filesScanned: n, counts, preexistingNotShown: preexisting, thirdPartySkipped: thirdParty, findings: kept, omittedByCap: omitted,
     inventory: { colors: top(inv.colors), fontSizes: top(inv.fontSizes), tailwindArbitrary: top(inv.tailwindArbitrary), important: inv.important } };
 }
 
@@ -388,6 +412,8 @@ function toMd(r) {
   const c = r.counts; const out = ['# Static scan (candidates to confirm)', '',
     `Files scanned: ${r.filesScanned} · ❌ ${c.blocker} · 🟠 ${c.major} · 🟡 ${c.minor} · 💡 ${c.suggestion}` +
     (r.preexistingNotShown ? ` · ${r.preexistingNotShown} pre-existing finding(s) on unchanged lines not shown (use --all-lines)` : '')];
+  if (r.thirdPartySkipped.length) out.push('', `Skipped ${r.thirdPartySkipped.length} third-party file(s) (use --include-vendor to scan them): ` +
+    r.thirdPartySkipped.slice(0, 10).map((t) => `\`${t.file}\` (${t.reason})`).join(', ') + (r.thirdPartySkipped.length > 10 ? ', …' : ''));
   let cur = null;
   for (const f of r.findings) {
     if (f.sev !== cur) { cur = f.sev; out.push('', `## ${ICON[cur]} ${cur}`, ''); }
@@ -405,7 +431,7 @@ function toMd(r) {
 }
 
 function main(argv) {
-  let json = false, platform = 'auto', failOn = null, max = 8, changed = null, changedArg = null, listOnly = false, allLines = false;
+  let json = false, platform = 'auto', failOn = null, max = 8, changed = null, changedArg = null, listOnly = false, allLines = false, includeVendor = false;
   const paths = [], include = [], exclude = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -414,6 +440,7 @@ function main(argv) {
     else if (a === '--fail-on') failOn = argv[++i];
     else if (a === '--max-per-rule') max = +argv[++i];
     else if (a === '--all-lines') allLines = true;
+    else if (a === '--include-vendor') includeVendor = true;
     else if (a === '--include') include.push(argv[++i]);
     else if (a === '--exclude') exclude.push(argv[++i]);
     else if (a === '--changed' || a === '--list-changed') { listOnly = a === '--list-changed'; changed = 'HEAD'; if (argv[i + 1] && !argv[i + 1].startsWith('--')) changedArg = argv[++i]; }
@@ -442,8 +469,9 @@ function main(argv) {
     if (!allLines) lineFilter = changedLines(changed, cwd);
     paths.splice(0, paths.length, ...files);
   }
-  if (!paths.length) { console.error('usage: node scan.mjs <paths...> [--json] [--platform web|mobile|desktop] [--fail-on blocker|major] [--include glob] [--exclude glob] | --changed [ref] [paths...] | --list-changed [ref] [paths...]'); return 2; }
-  const r = run(paths, { platform, maxPerRule: max, lineFilter, fileFilter });
+  if (!paths.length) { console.error('usage: node scan.mjs <paths...> [--json] [--platform web|mobile|desktop] [--fail-on blocker|major] [--include glob] [--exclude glob] [--include-vendor] | --changed [ref] [paths...] | --list-changed [ref] [paths...]'); return 2; }
+  // in --changed mode the files come from git, not from the user: third-party ones are still skipped
+  const r = run(paths, { platform, maxPerRule: max, lineFilter, fileFilter, includeVendor, explicit: changed ? new Set() : null });
   console.log(json ? JSON.stringify(r, null, 2) : toMd(r));
   if (failOn && Object.entries(r.counts).some(([s, n]) => SEV[s] <= SEV[failOn] && n)) return 1;
   return 0;

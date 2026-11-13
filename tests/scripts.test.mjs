@@ -434,6 +434,38 @@ test('detect: says so when no app is found', () => {
   });
 });
 
+test('scan: a folder in a git repository skips what .gitignore ignores', () => {
+  withRepo((dir, git) => {
+    write(dir, '.gitignore', 'prueba.html\nadmin/*\n');
+    write(dir, 'page.html', IMG);
+    write(dir, 'prueba.html', IMG);
+    write(dir, 'admin/x.prueba.php', IMG);
+    git('add', '.gitignore', 'page.html');
+    git('commit', '-qm', 'page');
+    write(dir, 'new.html', IMG); // untracked but not ignored: scanned
+    const r = JSON.parse(cli('scan.mjs', ['.', '--json'], dir).out);
+    assert.deepEqual([...new Set(r.findings.map((f) => f.file))].sort(), ['new.html', 'page.html']);
+    const named = JSON.parse(cli('scan.mjs', ['prueba.html', '--json'], dir).out);
+    assert.equal(named.filesScanned, 1); // a file passed by name is always scanned
+  });
+});
+
+test('scan: copied libraries are skipped and listed', () => {
+  withTempDir((dir) => {
+    write(dir, 'own.css', '.a { color: #123456; }');
+    write(dir, 'css/bootstrap453/css/bootstrap.css', '.btn { color: #007bff; }');
+    write(dir, 'css/w3.css', '/* W3.CSS 4.15 December 2020 by Jan Egil and Borge Refsnes */\n.w3 { color: #f44336; }');
+    write(dir, 'css/notes.css', '/* Estilos del tablero, revisión 2.5 */\n.t { color: #abcdef; }');
+    const r = JSON.parse(cli('scan.mjs', ['.', '--json'], dir).out);
+    assert.deepEqual(r.thirdPartySkipped.map((t) => t.file).sort(), ['css/bootstrap453/css/bootstrap.css', 'css/w3.css']);
+    assert.deepEqual(Object.keys(r.inventory.colors).sort(), ['#123456', '#abcdef']);
+    assert.match(cli('scan.mjs', ['.'], dir).out, /Skipped 2 third-party file\(s\)/);
+    const all = JSON.parse(cli('scan.mjs', ['.', '--json', '--include-vendor'], dir).out);
+    assert.equal(all.filesScanned, 4);
+    assert.equal(JSON.parse(cli('scan.mjs', ['css/w3.css', '--json'], dir).out).filesScanned, 1);
+  });
+});
+
 test('scan --list-changed: keeps file names with accents', () => {
   withRepo((dir) => {
     write(dir, 'Producción.html', IMG);
