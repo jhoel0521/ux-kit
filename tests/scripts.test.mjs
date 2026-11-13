@@ -154,7 +154,7 @@ test('detect: project folders make a monorepo and projects without UI are explai
     assert.deepEqual(r.apps.map((a) => a.path), ['apps/shop']);
     assert.deepEqual(r.projectsWithoutUi.map((p) => [p.path, p.reason]), [
       ['apps/admin', 'package.json has no dependencies'],
-      ['services/api', 'no UI framework in its dependencies'],
+      ['services/api', 'no UI stack found in package.json and no pages'],
       ['services/bad', 'invalid package.json'],
     ]);
     assert.match(cli('detect.mjs', ['.', '--md'], dir).out, /Without UI[\s\S]*`apps\/admin` — package\.json has no dependencies/);
@@ -401,6 +401,37 @@ test('ux-laws: the team rules are not called myths', () => {
   assert.doesNotMatch(myths, /\| "(?:Max 7|More than 7|Form with > 7)/);
   assert.doesNotMatch(skillText('ux-guide', 'SKILL.md'), /never turn laws into numeric limits/);
   assert.doesNotMatch(skillText('ux-check', 'SKILL.md'), /Never block/);
+});
+
+test('detect: a legacy PHP app is detected by its pages, copied libraries are not apps', () => {
+  withTempDir((dir) => {
+    write(dir, 'composer.json', '{"require":{"setasign/fpdf":"1.8"}}');
+    write(dir, 'index.php', '<?php include "Views/header.php"; ?>');
+    write(dir, 'Views/home.view.php', '<?php $x = 1; ?>\n<div class="container"><form method="post"></form></div>');
+    write(dir, 'Views/css/bootstrap.min.css', '/*! Bootstrap v5.3.0 */');
+    write(dir, 'Views/js/jquery-3.7.1.min.js', '/*! jQuery v3.7.1 */');
+    write(dir, 'Views/jquery-ui/package.json', '{"name":"jquery-ui","version":"1.14.0","main":"ui/widget.js","dependencies":{"jquery":">=1.12"}}');
+    write(dir, 'Views/jquery-ui/index.html', '<!doctype html><html><body></body></html>');
+    write(dir, 'ws/package.json', '{"private":true,"dependencies":{"ws":"^8.0.0"}}');
+    const r = detect(dir);
+    assert.deepEqual(r.apps.map((a) => [a.path, a.stack, a.platforms]), [['.', 'php + jquery + bootstrap', ['web']]]);
+    assert.equal(r.monorepo, false);
+    assert.deepEqual(r.projectsWithoutUi.map((p) => [p.path, p.reason]), [
+      ['Views/jquery-ui', 'third-party library copied into the project'],
+      ['ws', 'no UI stack found in package.json and no pages'],
+    ]);
+  });
+});
+
+test('detect: says so when no app is found', () => {
+  withTempDir((dir) => {
+    write(dir, 'composer.json', '{"require":{"monolog/monolog":"^3.0"}}');
+    write(dir, 'src/Job.php', '<?php class Job {}');
+    const r = cli('detect.mjs', ['.', '--md'], dir);
+    assert.equal(r.code, 0);
+    assert.match(r.out, /## No app detected/);
+    assert.match(r.out, /`\.` — no UI stack found in composer\.json and no pages/);
+  });
 });
 
 test('scan --list-changed: keeps file names with accents', () => {

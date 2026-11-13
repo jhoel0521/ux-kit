@@ -4,10 +4,12 @@
 // Works on single projects and monorepos: every folder with a manifest (package.json, composer.json,
 // build.gradle(.kts), pubspec.yaml, Package.swift/*.xcodeproj, *.csproj, pom.xml, CMakeLists.txt, Cargo.toml
 // with tauri, *.pro) becomes an "app" candidate. Output feeds the `apps:` section of .ux/config.yaml.
-// Read-only: never executes project code.
+// Legacy apps without a recognised manifest (plain PHP, static HTML) are detected by their pages.
+// Read-only: never executes project code. Exit code: 0 (also when no app is found: the Markdown says so) · 2 usage error.
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, basename, extname, dirname, resolve, sep } from 'node:path';
 import { isMain } from './is-main.mjs';
+import { isLibraryFolder, thirdPartyReason } from './third-party.mjs';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'vendor', 'Pods', '.gradle', 'target',
   '.dart_tool', 'coverage', '.venv', 'venv', '__pycache__', '.idea', '.turbo', 'storybook-static', 'DerivedData',
@@ -147,6 +149,23 @@ function discardReason(file) {
   return `no UI stack found in ${base}`;
 }
 
+const PAGE_RE = /<(?:!doctype\s+html|html|head|body|div|form|table|section|main|nav)\b/i;
+const LIBRARY_FILES = [[/(^|[\/\\])bootstrap(?:\.bundle)?(?:\.min)?\.(?:css|js)$/i, 'ui', 'bootstrap'],
+  [/(^|[\/\\])jquery(?:-\d[\w.]*)?(?:\.min)?\.js$/i, 'framework', 'jquery'], [/(^|[\/\\])w3\.css$/i, 'styling', 'w3css']];
+
+// A folder without a UI manifest is still a web app when it holds pages (PHP that prints HTML, or .html files).
+function pagesApp(files, root) {
+  let php = 0, html = 0; const libs = [];
+  for (const f of files) {
+    const ext = extname(f).toLowerCase();
+    for (const [re, cat, name] of LIBRARY_FILES) if (re.test(f)) libs.push([cat, name]);
+    if (thirdPartyReason(portable(relative(root, f)), read(f, 700))) continue; // a library's demo pages are not the app's
+    if (ext === '.php' && PAGE_RE.test(read(f, 20000))) php++;
+    else if (ext === '.html' || ext === '.htm') html++;
+  }
+  return php || html ? { framework: php ? 'php' : 'html', libs } : null;
+}
+
 // Paths written to .ux/config.yaml use "/" on every OS so the file is portable.
 const portable = (p) => p.split(sep).join('/');
 
@@ -156,7 +175,7 @@ export function detect(rootArg) {
   const apps = new Map();
   const ensure = (dir) => { if (!apps.has(dir)) apps.set(dir, { framework: new Set(), ui: new Set(), styling: new Set(), charts: new Set(),
     motion: new Set(), a11y: new Set(), tooling: new Set(), platforms: new Set(), themes: [], exts: {} }); return apps.get(dir); };
-  const manifestDirs = new Set(); const discarded = new Map();
+  const manifestDirs = new Set(); const discarded = new Map(); const manifestsOf = new Map();
   for (const f of files) {
     if (!MANIFEST(basename(f))) continue;
     const r = analyzeManifest(f);
@@ -164,10 +183,24 @@ export function detect(rootArg) {
     let dir = dirname(f);
     if (basename(dir) === 'src-tauri') dir = dirname(dir);
     if (/^build\.gradle/.test(basename(f)) && basename(dir) === 'app') dir = dirname(dir);
-    manifestDirs.add(dir);
+    manifestDirs.add(dir); manifestsOf.set(dir, [...(manifestsOf.get(dir) ?? []), basename(f)]);
+    if (dir !== root && isLibraryFolder(portable(relative(root, dir)))) { discarded.set(dir, 'third-party library copied into the project'); continue; }
     if (!r) { if (!discarded.has(dir)) discarded.set(dir, discardReason(f)); continue; }
     const a = ensure(dir);
     for (const k of Object.keys(r)) for (const v of r[k]) a[k].add(v);
+  }
+  // legacy apps: the root, or a folder whose manifest names no UI stack (composer.json with only PDF libraries…), holding pages
+  const projectDirs = [...new Set([...manifestDirs, root])].sort((x, y) => y.length - x.length);
+  const nearest = (f) => projectDirs.find((d) => f.startsWith(d + sep)) ?? root;
+  const noStack = (dir) => apps.has(dir) && !apps.get(dir).framework.size && !apps.get(dir).platforms.size;
+  for (const dir of new Set([root, ...discarded.keys(), ...[...apps.keys()].filter(noStack)])) {
+    if (apps.has(dir) && !noStack(dir)) continue;
+    if (dir !== root && isLibraryFolder(portable(relative(root, dir)))) continue;
+    const found = pagesApp(files.filter((f) => nearest(f) === dir), root);
+    if (!found) continue;
+    const a = ensure(dir); a.framework.add(found.framework); a.platforms.add('web');
+    for (const [cat, name] of found.libs) a[cat].add(name);
+    discarded.delete(dir);
   }
   const dirs = [...apps.keys()].sort((x, y) => y.length - x.length);
   const owner = (f) => dirs.find((d) => f === d || f.startsWith(d + '/') || f.startsWith(d + '\\'));
@@ -184,8 +217,8 @@ export function detect(rootArg) {
   }
   // strongest evidence first, so a large project can't push the real theme past the limit
   for (const a of apps.values()) a.themes = a.themes.sort((x, y) => y.score - x.score || x.path.localeCompare(y.path)).slice(0, MAX_THEMES);
-  // drop root "app" that is only a workspace wrapper (no framework) when children exist
-  const list = [...apps.entries()].filter(([d, a]) => a.framework.size || a.platforms.size || dirs.length === 1)
+  // a folder whose manifest names no UI stack and that holds no pages is not an app (it goes to "Without UI")
+  const list = [...apps.entries()].filter(([d, a]) => a.framework.size || a.platforms.size)
     .map(([d, a]) => ({
       name: basename(d), path: portable(relative(root, d)) || '.',
       stack: [...a.framework, ...a.ui, ...a.styling].join(' + ') || 'unknown',
@@ -197,8 +230,10 @@ export function detect(rootArg) {
   const kept = new Set(list.map((a) => a.path));
   const projects = [...manifestDirs].map((dir) => ({ dir, path: portable(relative(root, dir)) || '.' }));
   const hasProjectFolders = projects.filter((p) => /^(apps|packages|services)\//.test(p.path)).length > 1;
-  const projectsWithoutUi = projects.filter((p) => !kept.has(p.path) && !(p.path === '.' && projects.length > 1)) // a root next to sub-projects is only a wrapper
-    .map((p) => ({ name: basename(p.dir), path: p.path, reason: discarded.get(p.dir) ?? 'no UI framework in its dependencies' }))
+  // a root package.json with tooling only (husky, lint) next to sub-projects is a wrapper; a root whose manifest was discarded is shown
+  const wrapper = (p) => p.path === '.' && projects.length > 1 && !discarded.has(p.dir) && manifestsOf.get(p.dir).every((m) => m === 'package.json');
+  const projectsWithoutUi = projects.filter((p) => !kept.has(p.path) && !wrapper(p))
+    .map((p) => ({ name: basename(p.dir), path: p.path, reason: discarded.get(p.dir) ?? `no UI stack found in ${[...new Set(manifestsOf.get(p.dir))].join(', ')} and no pages` }))
     .sort((x, y) => x.path.localeCompare(y.path));
   return { root: rootArg, monorepo: list.length > 1 || hasProjectFolders, apps: list, projectsWithoutUi,
     hasUx: existsSync(join(root, '.ux', 'config.yaml')), hasStandardTokens: existsSync(join(root, '.ux', 'standard', 'tokens.json')),
@@ -207,6 +242,7 @@ export function detect(rootArg) {
 
 function toMd(o) {
   const out = ['# Detected stack', '', `- Monorepo: ${o.monorepo ? 'yes' : 'no'} · .ux/: ${o.hasUx ? 'yes' : 'no'} · git: ${o.hasGit ? 'yes' : 'no'}`, ''];
+  if (!o.apps.length) out.push('## No app detected', '- No manifest names a UI stack and no pages (.html, or .php printing HTML) were found.', '- ux-init treats the project as new. If it does have UI, add the app to `config.yaml` by hand and report the case.', '');
   for (const a of o.apps) {
     out.push(`## ${a.name} (\`${a.path}\`)`, `- Stack: ${a.stack}`, `- Platforms: ${a.platforms.join(', ') || '?'}`);
     if (a.charts.length) out.push(`- Charts: ${a.charts.join(', ')}`);
