@@ -3,8 +3,9 @@
 // Usage:
 //   node scan.mjs <paths...> [--json] [--platform web|mobile|desktop] [--fail-on blocker|major] [--max-per-rule 8]
 //   node scan.mjs --changed [git-ref] [paths...]   scan visual files changed vs ref (default HEAD, plus untracked), only
-//                                       inside paths when given; only findings on changed lines are shown
-//                                       (--all-lines to include pre-existing ones)
+//                                       inside paths when given; only findings on changed lines are shown,
+//                                       and not on lines that were only moved (the same text removed elsewhere
+//                                       in the diff, ignoring indentation); --all-lines shows everything
 //   node scan.mjs --list-changed [ref] [paths...]  only print the changed visual files (any language), one per line
 //   Any mode: --include <glob> / --exclude <glob> (repeatable, relative to the current directory; exclude wins).
 //   Inside a git repository a folder is scanned through git: files ignored by .gitignore are skipped (a file passed
@@ -346,13 +347,18 @@ const gitTop = (cwd) => (git(['rev-parse', '--show-toplevel'], cwd) || '').trim(
 const nulList = (s) => (s || '').split('\0').filter(Boolean); // -z output: names are never quoted (accents, spaces…)
 const UNTRACKED = ['ls-files', '--others', '--exclude-standard', '--full-name', '-z'];
 
+// Lines compared without indentation; short or punctuation-only lines (`}`, `</div>`) are too common to call "moved".
+const movedKey = (s) => { const t = s.replace(/\s+/g, ' ').trim().slice(0, 160); return t.length >= 12 && /[a-z0-9]{3}/i.test(t) ? t : null; };
+
 export function changedLines(ref = 'HEAD', cwd = '.') {
   // map absolute file -> Set of changed line numbers (null = whole file is new/untracked)
   const top = gitTop(cwd); if (!top) return null;
   const map = new Map(); let cur = null;
+  map.removed = new Set(); // normalized text of every removed line: a finding on an added line equal to one of them was moved, not written
   const diff = git(['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/', '-U0', ref], top);
   for (const line of (diff || '').split('\n')) {
-    if (line.startsWith('+++ ')) { const f = line.slice(4).replace(/\t$/, '').replace(/^"(.*)"$/, '$1').replace(/^b\//, ''); cur = f === '/dev/null' ? null : join(top, f); if (cur && !map.has(cur)) map.set(cur, new Set()); }
+    if (line.startsWith('-') && !line.startsWith('--- ')) { const t = movedKey(line.slice(1)); if (t) map.removed.add(t); }
+    else if (line.startsWith('+++ ')) { const f = line.slice(4).replace(/\t$/, '').replace(/^"(.*)"$/, '$1').replace(/^b\//, ''); cur = f === '/dev/null' ? null : join(top, f); if (cur && !map.has(cur)) map.set(cur, new Set()); }
     else if (cur && line.startsWith('@@')) { const m = line.match(/\+(\d+)(?:,(\d+))?/); const a = +m[1], n = m[2] == null ? 1 : +m[2]; for (let i = a; i < a + n; i++) map.get(cur).add(i); }
   }
   for (const f of nulList(git(UNTRACKED, top))) map.set(join(top, f), null);
@@ -398,12 +404,14 @@ export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = nul
     else if (ext === '.java') auditJava(p, text, ctx, findings);
     inventory(p, text, inv, lineFilter ? lineFilter.get(p) ?? undefined : null);
   }
-  let preexisting = 0;
+  let preexisting = 0, moved = 0;
   if (lineFilter) {
     const byRel = new Map([...lineFilter].map(([abs, set]) => [ctx.rel(abs), set]));
+    const removed = lineFilter.removed ?? new Set();
     for (let i = findings.length - 1; i >= 0; i--) {
       const f = findings[i]; if (!byRel.has(f.file)) continue; const set = byRel.get(f.file);
       if (set && !set.has(f.line)) { findings.splice(i, 1); preexisting++; }
+      else if (f.line && removed.has(movedKey(f.snippet || ''))) { findings.splice(i, 1); moved++; }
     }
   }
   if (inv.animations.size && !inv.reducedMotion)
@@ -418,14 +426,15 @@ export function run(paths, { platform = 'auto', maxPerRule = 8, lineFilter = nul
   kept.sort((a, b) => SEV[a.sev] - SEV[b.sev] || a.file.localeCompare(b.file) || a.line - b.line);
   const top = (o) => Object.fromEntries(Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 40));
   const counts = Object.fromEntries(Object.keys(SEV).map((s) => [s, findings.filter((f) => f.sev === s).length]));
-  return { filesScanned: n, counts, preexistingNotShown: preexisting, thirdPartySkipped: thirdParty, findings: kept, omittedByCap: omitted,
+  return { filesScanned: n, counts, preexistingNotShown: preexisting, movedNotShown: moved, thirdPartySkipped: thirdParty, findings: kept, omittedByCap: omitted,
     inventory: { colors: top(inv.colors), fontSizes: top(inv.fontSizes), tailwindArbitrary: top(inv.tailwindArbitrary), important: inv.important } };
 }
 
 function toMd(r) {
   const c = r.counts; const out = ['# Static scan (candidates to confirm)', '',
     `Files scanned: ${r.filesScanned} · ❌ ${c.blocker} · 🟠 ${c.major} · 🟡 ${c.minor} · 💡 ${c.suggestion}` +
-    (r.preexistingNotShown ? ` · ${r.preexistingNotShown} pre-existing finding(s) on unchanged lines not shown (use --all-lines)` : '')];
+    (r.preexistingNotShown ? ` · ${r.preexistingNotShown} pre-existing finding(s) on unchanged lines not shown (use --all-lines)` : '') +
+    (r.movedNotShown ? ` · ${r.movedNotShown} finding(s) on lines moved from elsewhere in the diff not shown (use --all-lines)` : '')];
   if (r.thirdPartySkipped.length) out.push('', `Skipped ${r.thirdPartySkipped.length} third-party file(s) (use --include-vendor to scan them): ` +
     r.thirdPartySkipped.slice(0, 10).map((t) => `\`${t.file}\` (${t.reason})`).join(', ') + (r.thirdPartySkipped.length > 10 ? ', …' : ''));
   let cur = null;

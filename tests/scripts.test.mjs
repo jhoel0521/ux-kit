@@ -489,6 +489,23 @@ test('scan: literal colors in style attributes, named colors, rgb() and hsl()', 
   });
 });
 
+test('scan --changed: code moved to another file is not reported as new', () => {
+  withRepo((dir, git) => {
+    const css = ['.panel { color: #123456; }', '.note { font-size: 10px; }'];
+    write(dir, 'page.php', `<div>\n<style>\n${css.join('\n')}\n</style>\n</div>\n`);
+    git('add', '.');
+    git('commit', '-qm', 'inline css');
+    write(dir, 'page.php', '<div>\n<link rel="stylesheet" href="page.css">\n</div>\n');
+    write(dir, 'page.css', `  ${css.join('\n  ')}\n.fresh { color: #abcdef; }\n`); // moved with new indentation, plus one new line
+    const r = JSON.parse(cli('scan.mjs', ['--changed', '--json'], dir).out);
+    assert.deepEqual(r.findings.map((f) => `${f.file}:${f.line} ${f.rule}`), ['page.css:3 WEB-CSS-LITERAL']);
+    assert.equal(r.movedNotShown, 2);
+    assert.match(cli('scan.mjs', ['--changed'], dir).out, /2 finding\(s\) on lines moved/);
+    const all = JSON.parse(cli('scan.mjs', ['--changed', '--all-lines', '--json'], dir).out);
+    assert.equal(all.findings.filter((f) => f.file === 'page.css').length, 3);
+  });
+});
+
 test('scan --list-changed: keeps file names with accents', () => {
   withRepo((dir) => {
     write(dir, 'Producción.html', IMG);
