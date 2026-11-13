@@ -4,7 +4,7 @@ description: "Light UX/UI review of what just changed — only the new or modifi
 license: MIT
 compatibility: Any agent supporting SKILL.md. Scripts need Node.js 18+ and .ux/ from ux-init; git is used to find changed files.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   profile: core
   kit: ux-kit
 ---
@@ -43,6 +43,8 @@ For the changed files the scanner ignores (or covers partially), read the diff a
 - **Standard**: colors, fonts, spacing, radii come from the theme/tokens; values match `.ux/standard/tokens.json`; copy uses the glossary in `users.md`.
 - **Platform conventions** for the app's platforms (`.ux/knowledge/platforms.md`, only the relevant section).
 - **Destructive actions / consents** (confirm or undo; no dark patterns).
+- **Coherence across screens**: for each changed component, find where the same concept appears elsewhere — list and detail, mobile and desktop, other apps in `config.yaml` — by searching its name and its domain words (e.g. `rg -l "SizePill|size|talla"`), and check that it looks and behaves the same (Similarity, Nielsen H4, WCAG 3.2.4). A different look is `aesthetic-consistency`; a different name for the same thing fails WCAG 3.2.4. Report these even though those files did not change.
+- **Interactions that replace content** (filters, variant selectors, tabs): if a dev URL is available, run `render.mjs <url> --interact` (step 5) to catch reloads, scroll jumps and lost focus.
 Load other knowledge files only when a finding needs justification.
 
 ## 3b. ux-laws checklist
@@ -83,9 +85,9 @@ If `users.md`/`brand.md` still contain `{{…}}` placeholders, skip glossary/bra
 ## 5. Optional render pass
 Only if the user asks or a dev URL is known and cheap to use:
 ```bash
-node .ux/scripts/render.mjs <url> --out .ux/reports/render [--dark]
+node .ux/scripts/render.mjs <url> --out .ux/reports/render [--dark] [--interact]
 ```
-(needs Playwright; if missing, say how to install and skip).
+(needs Playwright; if missing, say how to install and skip). Add `--interact` when the change touches filters, variant selectors, tabs or anything that updates part of the page: it chooses options like a user and reports reloads, scroll jumps and lost focus. It runs the page's handlers, so only on a dev or staging URL.
 
 ## 6. Report
 Use `.ux/knowledge/severity.md` (fixed base + `config.yaml → severity` overrides + `exceptions`). Keep it short: verdict, counts, findings (most severe first) with file:line, rule id, law (e.g. `fitts-spacing · Fitts`), evidence and a concrete fix, then the ux-laws checklist marked ✅/❌/⚠️/❔ per screen. Record the standard version from `.ux/standard/CHANGELOG.md`. Save to `.ux/reports/YYYY-MM-DD-ux-check-<scope>.md` (scope = the app name, or `changes` for multi-app diffs, or the reviewed folder name) (template `.ux/reports/_template.md`). In the chat: verdict, counts, top findings, and offer to fix blockers and majors now.

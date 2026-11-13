@@ -41,6 +41,15 @@ Every interactive component and every data view is checked against this matrix. 
 
 **Selectors.** ≤ ~5 options: radios/segmented. 6–15: select. Many: combobox with search. Boolean with immediate effect: switch; boolean saved with "Save": checkbox. Dates: picker + tolerant manual entry.
 
+**Variant selectors (size, color, model).** A very common pattern in shops and catalogs:
+- Every option of a group has the **same size**. Status text ("Last units", "Sold out") never goes inside an option, because it makes that option bigger; put it outside, as a legend or next to the price.
+- The selected option is **filled** (solid background), not only outlined: with some brand colors a border alone is barely visible.
+- A color option shows a **swatch and the color name in text** (WCAG 1.4.1); the name can be visually hidden if it is still available to assistive tech and shown on selection.
+- Availability and "low stock" are computed for the **current selection** (the other attributes already chosen), not for the whole product.
+- The availability of the **chosen variant** reads next to the price.
+- Choosing an option updates price, availability and the action **without reloading the page or moving the scroll**, keeps focus on the option and announces the change (`aria-live="polite"` on the price/availability block). Check it with `render.mjs --interact`.
+- The list card and the detail page show the same option with the same component (one source of style).
+
 **Navigation.** Current location always visible. Mobile: 3–5 destinations in a bottom bar. Desktop: visible sidebar or top nav. Breadcrumbs in deep hierarchies. Unique screen titles. URLs restore state (filters, tabs) on web.
 
 **Tables and data lists.** Semantic headers; text left, numbers right with tabular figures; units in headers. Sort, filter, search; adjustable density; sticky header; sticky first column with horizontal scroll. On mobile: cards or prioritized columns, not 12 columns scrolling. Row actions visible or in a named "⋯" menu; bulk actions. Empty/loading/error states; pagination with total.

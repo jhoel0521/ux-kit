@@ -4,7 +4,7 @@ description: UX/UI quality guidance the agent applies by itself whenever it plan
 license: MIT
 compatibility: Any agent supporting SKILL.md. Uses the project folder .ux/ created by ux-init; works with reduced guidance without it.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   profile: core
   kit: ux-kit
 ---
@@ -45,6 +45,8 @@ Follow the standard first, then these defaults (details in `.ux/knowledge/` when
 8. Honor system settings: text size, dark mode, reduce motion, reduce transparency, high contrast.
 9. Feedback < 100 ms; indicator > 400 ms; skeleton/progress > 1 s; progress + cancel > 10 s.
 10. No dark patterns.
+11. One source of style for one concept: the same option, card or status looks the same on every screen (list and detail, mobile and desktop). Reuse the component; don't restyle a copy.
+12. Updating part of the page (filters, variant selectors, tabs) keeps focus on the control, keeps the scroll position and announces the change (`aria-live`); no full reload for choosing an option. Variant selectors: `.ux/knowledge/states-and-components.md`.
 
 Apply **ux-laws** while building: Fitts and Hick are blocking, Jakob, Miller, Peak-End and Aesthetic-Usability are conscious decisions. Name the law (and its rule id) when it justifies a decision.
 

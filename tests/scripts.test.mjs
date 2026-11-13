@@ -506,6 +506,21 @@ test('scan --changed: code moved to another file is not reported as new', () => 
   });
 });
 
+// Needs Playwright with Chromium. Set UX_PLAYWRIGHT_DIR to a folder where `npm i playwright && npx playwright install
+// chromium` was run; without it the test is skipped (render.mjs resolves Playwright from the working directory).
+const PLAYWRIGHT_DIR = process.env.UX_PLAYWRIGHT_DIR;
+test('render --interact: reports reloads, scroll jumps and lost focus', { skip: !PLAYWRIGHT_DIR && 'UX_PLAYWRIGHT_DIR not set' }, () => {
+  const page = join(ROOT, 'tests', 'fixtures', 'render', 'interact.html');
+  withTempDir((out) => {
+    const r = cli('render.mjs', [page, '--viewports', 'mobile', '--interact', '--json', '--out', out], PLAYWRIGHT_DIR);
+    assert.ok(r.code === 0 || r.code === 1, r.err);
+    const report = JSON.parse(r.out);
+    const got = report.findings.filter((f) => f.rule.startsWith('R-INTERACT')).map((f) => `${f.rule} ${f.where}`).sort();
+    assert.deepEqual(got, ['R-INTERACT-FOCUS input "A domicilio"', 'R-INTERACT-RELOAD input "Rojo"', 'R-INTERACT-SCROLL input "Modelo A"']);
+    assert.equal(report.meta.interacted, 4);
+  });
+});
+
 test('scan --list-changed: keeps file names with accents', () => {
   withRepo((dir) => {
     write(dir, 'Producción.html', IMG);

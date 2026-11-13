@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interaction fixture</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 16px; min-height: 3000px; }
+  fieldset { margin: 0 0 24px; }
+  label { display: inline-flex; min-height: 48px; align-items: center; gap: 8px; margin-right: 16px; }
+  input { width: 24px; height: 24px; }
+</style>
+</head>
+<body>
+<h1>Interaction fixture</h1>
+<p>Each group behaves differently when an option is chosen. Only the first one is correct.</p>
+
+<!-- correct: updates the price in place, focus stays on the option -->
+<fieldset id="ok">
+  <legend>Talla</legend>
+  <label><input type="radio" name="ok" value="36"> 36</label>
+  <p id="price" aria-live="polite">Bs 100</p>
+</fieldset>
+
+<!-- wrong: reloads the page -->
+<fieldset id="reload">
+  <legend>Color</legend>
+  <label><input type="radio" name="reload" value="red"> Rojo</label>
+</fieldset>
+
+<!-- wrong: jumps the scroll -->
+<fieldset id="scroll">
+  <legend>Modelo</legend>
+  <label><input type="radio" name="scroll" value="a"> Modelo A</label>
+</fieldset>
+
+<!-- wrong: replaces the group, so focus is lost -->
+<fieldset id="replace">
+  <legend>Envío</legend>
+  <label><input type="radio" name="replace" value="home"> A domicilio</label>
+</fieldset>
+
+<script>
+  document.querySelector('#ok input').addEventListener('change', () => { document.getElementById('price').textContent = 'Bs 120'; });
+  document.querySelector('#reload input').addEventListener('change', () => location.reload());
+  document.querySelector('#scroll input').addEventListener('change', () => window.scrollTo(0, window.scrollY + 400));
+  document.querySelector('#replace input').addEventListener('change', (e) => { const g = e.target.closest('fieldset'); g.innerHTML = g.innerHTML; });
+</script>
+</body>
+</html>

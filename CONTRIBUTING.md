@@ -21,7 +21,7 @@ Thanks for helping! ux-kit aims to be useful for any agent, any methodology and 
 ```bash
 node --test tests/scripts.test.mjs
 ```
-Run it before and after changing a script. If a scanner change is intended, update `tests/expected/monorepo-scan.json` and say why in the PR.
+Run it before and after changing a script. The `render.mjs` test runs only when `UX_PLAYWRIGHT_DIR` points to a folder with Playwright and Chromium installed (`npm i playwright && npx playwright install chromium`). If a scanner change is intended, update `tests/expected/monorepo-scan.json` and say why in the PR.
 
 To look at the output by hand:
 ```bash

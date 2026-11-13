@@ -80,6 +80,7 @@ node .ux/scripts/contrast.mjs "#777" "#fff"        # WCAG contrast
 node .ux/scripts/tokens.mjs .ux/standard/tokens.json --suggest   # validate tokens and contrast
 node .ux/scripts/tokens.mjs --from-tailwind tailwind.config.ts --out .ux/standard/tokens.json   # also --from-css, --from-mui; never runs your code
 node .ux/scripts/render.mjs http://localhost:5173  # needs Playwright: npm i -D playwright && npx playwright install chromium
+node .ux/scripts/render.mjs http://localhost:5173 --interact   # also choose options: reloads, scroll jumps, lost focus (dev/staging only)
 ```
 `scan.mjs --fail-on blocker` exits 1 for CI.
 

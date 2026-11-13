@@ -2,7 +2,10 @@
 // ux-kit · render.mjs — measure a rendered UI (web, Tauri/Electron dev server, Storybook, Flutter web, RN web).
 // Requires Playwright in the project or globally: npm i -D playwright && npx playwright install chromium
 // Usage:
-//   node render.mjs <url|file.html> [--out dir] [--viewports mobile,desktop,reflow] [--dark] [--axe path/axe.min.js] [--json]
+//   node render.mjs <url|file.html> [--out dir] [--viewports mobile,desktop,reflow] [--dark] [--axe path/axe.min.js] [--interact] [--json]
+// --interact chooses options like a user (radios, checkboxes, selects, tabs, switches; up to 12, on the mobile viewport)
+//   and reports a full reload, a scroll jump or lost focus after each choice. It runs the page's own handlers, so use it
+//   on a dev or staging URL, never on production data.
 // Measures per viewport (mobile 390×844 touch, desktop 1440×900, reflow 320×640):
 //   targets < 24px (WCAG 2.5.8 incl. spacing exception) and < 44px on mobile · missing accessible names ·
 //   images without alt · placeholder-only labels · computed text contrast (solid backgrounds) ·
@@ -111,6 +114,43 @@ async function checkFocus(page, max = 40) {
   return [F, seen.size];
 }
 
+const CONTROLS = 'input[type=radio]:not([disabled]),input[type=checkbox]:not([disabled]),select:not([disabled]),[role=radio]:not([aria-disabled="true"]),[role=switch],[role=tab],button[aria-pressed]';
+
+// Choose options the way a user does and check what happens: no full reload, no scroll jump, focus kept.
+async function interactCheck(page, url, vp, max = 12) {
+  const F = []; let done = 0;
+  const total = await page.locator(CONTROLS).count();
+  for (let i = 0; i < total && done < max; i++) {
+    const el = page.locator(CONTROLS).nth(i);
+    const info = await el.evaluate((e) => ({
+      tag: e.tagName.toLowerCase(), options: e.options ? e.options.length : 0, next: e.options ? (e.selectedIndex + 1) % e.options.length : 0,
+      name: (e.getAttribute('aria-label') || (e.labels && e.labels[0] && e.labels[0].innerText) || e.innerText || e.value || e.name || e.id || '').trim().slice(0, 40),
+    }), null, { timeout: 2000 }).catch(() => null);
+    if (!info || (info.tag === 'select' && info.options < 2)) continue;
+    const where = `${info.tag}${info.name ? ` "${info.name}"` : ''}`;
+    await el.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+    // a marker on window survives same-page updates (fetch, history, #hash) and disappears with a real page load
+    const before = await page.evaluate(() => { window.__uxMarker = true; return scrollY; });
+    try {
+      if (info.tag === 'select') await el.selectOption({ index: info.next }, { timeout: 3000 });
+      else await el.click({ timeout: 3000 }).catch(() => el.click({ force: true, timeout: 3000 }));
+    } catch { continue; }
+    await page.waitForTimeout(900);
+    await page.waitForLoadState('load', { timeout: 5000 }).catch(() => {});
+    done++;
+    const after = await page.evaluate(() => { const a = document.activeElement;
+      return { reloaded: !window.__uxMarker, y: scrollY, focused: !!a && a !== document.body && a !== document.documentElement && a.isConnected }; }).catch(() => ({ reloaded: true }));
+    if (after.reloaded) {
+      F.push({ rule: 'R-INTERACT-RELOAD', sev: 'major', viewport: vp, where, msg: 'Choosing this option reloads or leaves the page: scroll position and focus are lost', ref: 'WCAG 3.2.2 / ux-guide' });
+      await page.goto(url, { waitUntil: 'load', timeout: 30000 }).catch(() => {}); await page.waitForTimeout(300);
+      continue;
+    }
+    if (Math.abs(after.y - before) > 48) F.push({ rule: 'R-INTERACT-SCROLL', sev: 'major', viewport: vp, where, msg: `The page scrolled ${Math.round(after.y - before)}px after choosing this option`, ref: 'ux-guide' });
+    if (!after.focused) F.push({ rule: 'R-INTERACT-FOCUS', sev: 'major', viewport: vp, where, msg: 'Focus was lost after choosing this option (the control was replaced or blurred)', ref: 'WCAG 2.4.3' });
+  }
+  return [F, done];
+}
+
 async function loadPlaywright() {
   for (const base of [process.cwd() + '/', import.meta.url]) {
     try { const req = createRequire(base.startsWith('file:') ? base : pathToFileURL(base).href); return req('playwright'); } catch {}
@@ -118,7 +158,8 @@ async function loadPlaywright() {
   try { return await import('playwright'); } catch { return null; }
 }
 
-export async function run(target, { viewports = ['mobile', 'desktop', 'reflow'], out = '.ux/reports/render', dark = false, axe = null } = {}) {
+export async function run(target, { viewports = ['mobile', 'desktop', 'reflow'], out = '.ux/reports/render', dark = false, axe = null, interact = false } = {}) {
+  const interactOn = viewports.includes('mobile') ? 'mobile' : viewports[0];
   const pw = await loadPlaywright(); if (!pw) return null;
   const url = /^[a-z]+:\/\//i.test(target) ? target : pathToFileURL(resolve(target)).href;
   mkdirSync(out, { recursive: true });
@@ -132,6 +173,7 @@ export async function run(target, { viewports = ['mobile', 'desktop', 'reflow'],
       await page.waitForTimeout(500);
       const shot = join(out, `screenshot-${vp}${dark ? '-dark' : ''}.png`); await page.screenshot({ path: shot, fullPage: true }); meta.screenshots.push(shot);
       findings.push(...analyze(await page.evaluate(collect), vp));
+      if (interact && vp === interactOn) { const [ff, n] = await interactCheck(page, url, vp); findings.push(...ff); meta.interacted = n; }
       if (vp === 'desktop') {
         const [ff, n] = await checkFocus(page); findings.push(...ff); meta.tabbed = n;
         if (axe && existsSync(axe)) {
@@ -154,7 +196,8 @@ export async function run(target, { viewports = ['mobile', 'desktop', 'reflow'],
 
 function toMd(r) {
   const I = { blocker: '❌', major: '🟠', minor: '🟡', suggestion: '💡' }; const c = r.counts, m = r.meta;
-  const out = [`# Render audit — ${m.url}`, '', `❌ ${c.blocker} · 🟠 ${c.major} · 🟡 ${c.minor} · 💡 ${c.suggestion} · elements reached with Tab: ${m.tabbed}`, '', 'Screenshots: ' + m.screenshots.join(', ')];
+  const out = [`# Render audit — ${m.url}`, '', `❌ ${c.blocker} · 🟠 ${c.major} · 🟡 ${c.minor} · 💡 ${c.suggestion} · elements reached with Tab: ${m.tabbed}` +
+    (m.interacted != null ? ` · options chosen (--interact): ${m.interacted}` : ''), '', 'Screenshots: ' + m.screenshots.join(', ')];
   let cur = null;
   for (const f of r.findings.slice(0, 200)) { if (f.sev !== cur) { cur = f.sev; out.push('', `## ${I[cur]} ${cur}`, ''); } out.push(`- **[${f.rule}]** (${f.viewport}) \`${f.where}\` — ${f.msg} _(ref: ${f.ref})_`); }
   if (m.axe == null) out.push('', '_axe-core not run (add it with --axe node_modules/axe-core/axe.min.js)._');
@@ -166,8 +209,9 @@ async function main(argv) {
   for (let i = 0; i < argv.length; i++) { const a = argv[i];
     if (a === '--viewports') o.viewports = argv[++i].split(',').filter((v) => VIEWPORTS[v]);
     else if (a === '--out') o.out = argv[++i]; else if (a === '--dark') o.dark = true; else if (a === '--axe') o.axe = argv[++i];
+    else if (a === '--interact') o.interact = true;
     else if (a === '--json') json = true; else target = a; }
-  if (!target) { console.error('usage: node render.mjs <url|file.html> [--out dir] [--viewports mobile,desktop,reflow] [--dark] [--axe path] [--json]'); return 2; }
+  if (!target) { console.error('usage: node render.mjs <url|file.html> [--out dir] [--viewports mobile,desktop,reflow] [--dark] [--axe path] [--interact] [--json]'); return 2; }
   if (!o.axe) { const c = join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js'); if (existsSync(c)) o.axe = c; }
   const r = await run(target, o);
   if (!r) { console.error('Playwright not found. Install: npm i -D playwright && npx playwright install chromium'); return 3; }
