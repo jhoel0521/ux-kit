@@ -4,7 +4,7 @@ description: Define or update the project's UX standard in .ux/standard/ — who
 license: MIT
 compatibility: Any agent supporting SKILL.md. Web research needs a search tool; otherwise uses links/screenshots provided by the user. Scripts need Node.js 18+ and .ux/ from ux-init.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   profile: core
   kit: ux-kit
 ---

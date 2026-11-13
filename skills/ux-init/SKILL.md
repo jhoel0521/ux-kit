@@ -4,7 +4,7 @@ description: Set up ux-kit in a project, or re-sync it. Creates the agent-indepe
 license: MIT
 compatibility: Any agent supporting SKILL.md. Scripts need Node.js 18+. Copies files from this skill's assets/ folder into the project.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   profile: core
   kit: ux-kit
 ---

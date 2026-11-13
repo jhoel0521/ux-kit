@@ -4,7 +4,7 @@ description: "Applies the 6 core laws of UX (Jakob, Hick, Fitts, Miller, Peak-En
 license: MIT
 compatibility: Any agent supporting SKILL.md. Reads .ux/config.yaml (severity overrides, exceptions) when ux-init has created it; works without it.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   profile: core
   kit: ux-kit
 ---

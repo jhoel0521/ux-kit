@@ -4,7 +4,7 @@ description: Review an agent's plan from the UX/UI point of view before the huma
 license: MIT
 compatibility: Any agent supporting SKILL.md. Uses .ux/ from ux-init when present.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   profile: core
   kit: ux-kit
 ---

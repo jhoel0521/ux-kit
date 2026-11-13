@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 — unreleased
+Fixes from the pilot on a legacy PHP project and on Clic Moda SCZ.
+- detect: legacy PHP and plain HTML apps are detected by their pages; copied libraries (jquery-ui/, bootstrap*/) are not apps; "No app detected" when nothing is found (#8, #13).
+- scan: a folder in a git repository respects .gitignore (#9); libraries copied by hand are skipped and listed, --include-vendor scans them (#10); literal colors in style attributes, named colors, rgb() and hsl() (#11); code moved between files is not reported as new in --changed (#14).
+- config: `input` (touch | pointer | both | auto) and `density` (compact | comfortable | spacious) per app; a web used only on computers is `input: pointer` (#12). Density sizes in visual-system.md, minimums are floors, new `oversized-ui` rule (#15).
+- ux-guide / ux-check: variant selectors, coherence across screens, partial updates that keep focus and scroll; render.mjs --interact reports reloads, scroll jumps and lost focus (#7).
+
 ## 0.2.0 — unreleased
 - New core skill `ux-laws`: the 6 core laws of UX (Fitts, Hick, Jakob, Miller, Peak-End, Aesthetic-Usability) with one deep reference per law, a declare-before-coding step and a delivery checklist. Based on the team's `leyes-ux` skill.
 - Team rules become configurable severity ids: `fitts-reach`, `fitts-spacing`, `hick-options`, `hick-steps`, `jakob-conventions`, `miller-chunks`, `peak-end`, `type-levels`, `aesthetic-consistency`. `touch-target-platform` and `primary-action-competition` now default to blocker.
