@@ -38,6 +38,20 @@ const SEV = { blocker: 0, major: 1, minor: 2, suggestion: 3 };
 const ICON = { blocker: '❌', major: '🟠', minor: '🟡', suggestion: '💡' };
 const TOKEN_FILE = /(theme|tokens?|colou?rs?|palette|tailwind\.config|variables|design[-_]?system|typography|Type\.kt|Color\.kt|Theme\.kt|styles\.xml|colors\.xml|\.tokens\.json|globals?\.css|app\.css|index\.css)/i;
 const isTokenFile = (p) => TOKEN_FILE.test(basename(p)) || /[\/\\](theme|tokens|design-system)[\/\\]/i.test(p);
+// CSS named colors (CSS Color 4). transparent, currentColor and inherit are left out: they are not literal design values.
+const NAMED_COLORS = ('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood ' +
+  'cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey ' +
+  'darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey ' +
+  'darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite ' +
+  'gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon ' +
+  'lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue ' +
+  'lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid ' +
+  'mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin ' +
+  'navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff ' +
+  'peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver ' +
+  'skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen').split(' ');
+// A color property — in a stylesheet, a <style> block or a style="…" attribute — and the literal color in its value.
+const CSS_COLOR = new RegExp(String.raw`(?:^|[;{\s"'])((?:background|border(?:-(?:top|right|bottom|left))?|outline|text-decoration)(?:-color)?|color|fill|stroke)\s*:\s*[^;}"'<>]*?(#[0-9a-fA-F]{3,8}\b|(?:rgba?|hsla?)\([^)]*\)|(?<![\w./-])(?:${NAMED_COLORS.join('|')})(?![\w./-]))`, 'gi'); // ./ keep url(img/red.png) out
 
 const lineOf = (t, i) => t.slice(0, i).split('\n').length;
 const snippetAt = (t, i) => { const s = t.lastIndexOf('\n', i - 1) + 1; const e = t.indexOf('\n', i); return t.slice(s, e === -1 ? t.length : e).trim().slice(0, 160); };
@@ -86,7 +100,7 @@ function auditWeb(path, text, ctx, out) {
   for (const m of text.matchAll(/<meta[^>]+name=["']viewport["'][^>]*>/gi))
     if (/user-scalable\s*=\s*(no|0)|maximum-scale\s*=\s*1(\.0)?\b/i.test(m[0])) F('WEB-ZOOM', 'blocker', m.index, 'Viewport blocks zoom', 'WCAG 1.4.4');
   for (const m of text.matchAll(/<html\b([^>]*)>/gi)) if (!/\blang\s*=/.test(m[1])) F('WEB-LANG', 'major', m.index, '<html> without lang', 'WCAG 3.1.1');
-  if (CSS.has(ext) || text.includes('<style')) {
+  if (CSS.has(ext) || text.includes('<style') || /\bstyle\s*=\s*["']/.test(text)) {
     // a :focus rule only counts when it draws something; `:focus{outline:none}` alone is the problem, not the fix
     const hasFocus = [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some((r) => /:focus/.test(r[1]) &&
       /outline(?:-width|-style|-color)?\s*:(?!\s*(?:none|0)\b)|box-shadow\s*:(?!\s*none\b)|border(?:-\w+)?\s*:(?!\s*(?:none|0)\b)|background(?:-color)?\s*:|text-decoration\s*:(?!\s*none\b)/.test(r[2]));
@@ -94,7 +108,7 @@ function auditWeb(path, text, ctx, out) {
       F('WEB-FOCUS', hasFocus ? 'minor' : 'blocker', m.index, hasFocus ? 'Outline removed; verify the :focus/:focus-visible style replaces it with ≥3:1' : 'Outline removed and no visible :focus/:focus-visible replacement in this file', 'WCAG 2.4.7');
     for (const m of text.matchAll(/font-size\s*:\s*(\d+(?:\.\d+)?)px/g)) if (+m[1] < 12) F('WEB-FONT-SMALL', 'minor', m.index, `Text ${m[1]}px (<12px)`, 'Legibility');
     for (const m of text.matchAll(/z-index\s*:\s*(\d{4,})/g)) F('WEB-ZINDEX', 'minor', m.index, `z-index ${m[1]}: use layer tokens`, 'Visual system');
-    if (!isTokenFile(path)) for (const m of text.matchAll(/(?:^|[;{\s])((?:background-)?color|border(?:-color)?|fill|stroke)\s*:\s*[^;}]*?(#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))/g))
+    if (!isTokenFile(path)) for (const m of text.matchAll(CSS_COLOR))
       F('WEB-CSS-LITERAL', 'minor', m.index, `Literal color ${m[2]} in ${m[1]}: use a token/variable (verify contrast)`, 'literal-design-values');
   }
   if (!markup) return;

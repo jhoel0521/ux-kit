@@ -466,6 +466,29 @@ test('scan: copied libraries are skipped and listed', () => {
   });
 });
 
+test('scan: literal colors in style attributes, named colors, rgb() and hsl()', () => {
+  withTempDir((dir) => {
+    write(dir, 't.php', [
+      '<!DOCTYPE html><html lang="es"><body>',
+      '<table><thead style="text-align: center; background-color: cadetblue;"><tr><th>A</th></tr></thead></table>',
+      '<div style="color: red">named</div>',
+      '<div style="color: rgb(244, 208, 63)">rgb</div>',
+      '<div style="color: hsl(10, 50%, 50%)">hsl</div>',
+      '<div style="color: #abcdef">hex</div>',
+      '<style>.x { background: tomato; border-color: navy; } .y { color: #123456; }</style>',
+      '</body></html>'].join('\n'));
+    write(dir, 'edge.css', [
+      '.a { background: url(img/red.png) no-repeat; }',
+      '.b { color: var(--red); }',
+      '.c { color: inherit; border-color: currentColor; background: transparent; }',
+      '.d { transition: color 0.3s; }',
+      '.e { border: 1px solid black; }'].join('\n'));
+    const literal = (file) => run([join(dir, file)]).findings.filter((f) => f.rule === 'WEB-CSS-LITERAL').map((f) => f.msg.match(/Literal color (.+) in/)[1]);
+    assert.deepEqual(literal('t.php'), ['cadetblue', 'red', 'rgb(244, 208, 63)', 'hsl(10, 50%, 50%)', '#abcdef', 'tomato', 'navy', '#123456']);
+    assert.deepEqual(literal('edge.css'), ['black']);
+  });
+});
+
 test('scan --list-changed: keeps file names with accents', () => {
   withRepo((dir) => {
     write(dir, 'Producción.html', IMG);
