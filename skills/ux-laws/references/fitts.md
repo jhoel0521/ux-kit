@@ -20,6 +20,8 @@ Formulated by Paul Fitts in 1954 while studying human motor control.
 
 If a critical button (primary CTA, navigation, "buy", "send", "log out") fails this, **block the delivery**.
 
+These are **minimums, not targets**. The size each control actually gets comes from the app's density (`config.yaml → density`, table in `.ux/knowledge/visual-system.md` §4b). Inflating every control above the minimum makes the UI look oversized (`oversized-ui`); a small visual control can keep the minimum hit area with padding. The touch sizes apply when the app's `input` is `touch` or `both`.
+
 ### 2. Spacing between targets (rule id `fitts-spacing`)
 
 - At least **8px** between clickable elements on mobile.

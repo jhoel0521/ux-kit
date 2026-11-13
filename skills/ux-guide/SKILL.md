@@ -21,7 +21,7 @@ You are planning or building UI. This skill keeps UX/UI quality in mind without 
 
 ## 1. When planning or proposing changes
 Add a short "UX/UI considerations" part to the plan you are writing (wherever the plan lives: a proposal, design doc, task list, plan-mode output). It starts with the **ux-laws** declaration: how many primary options each screen has (Hick, at most 7) and its touch targets with size and zone (Fitts), plus a line for Miller and Peak-End when they apply. Then cover only what applies:
-1. **Who and where**: which user profile(s) from `users.md`, context (device, one hand, gloves, desktop heavy use).
+1. **Who and where**: which user profile(s) from `users.md`, context (device, one hand, gloves, desktop heavy use), and the app's `input` and `density` from `config.yaml`.
 2. **Flow**: steps from start to end; the primary action per screen (one); how the flow ends (confirmation + next step).
 3. **States**: loading, empty (first use / no results), error with recovery, success, offline, no permission.
 4. **Platform conventions** for the target platforms (back behavior, navigation, dialogs, shortcuts on desktop).
@@ -36,7 +36,7 @@ Keep it proportional: a small button change needs two lines, a new module needs 
 ## 2. When building
 Follow the standard first, then these defaults (details in `.ux/knowledge/` when it exists):
 1. Use the project's tokens/theme; no literal colors, sizes or spacing in components.
-2. Targets: ≥ 24×24 CSS px always (WCAG 2.5.8); every touch target ≥ 44pt iOS / 48dp Android / 44px on web shown on phones / ~40epx Windows touch, with ≥ 8px between them and ≥ 16px between opposite actions (ux-laws, Fitts).
+2. Targets: ≥ 24×24 CSS px always (WCAG 2.5.8); when the app's `input` includes touch, every touch target ≥ 44pt iOS / 48dp Android / 44px web / ~40epx Windows touch, with ≥ 8px between them and ≥ 16px between opposite actions (ux-laws, Fitts). These are **floors, not targets**: take control heights, padding and text sizes from the app's `density` (`.ux/knowledge/visual-system.md` §4b). A small icon can keep a 44px hit area through padding without looking big.
 3. Contrast: text ≥ 4.5:1 (large ≥ 3:1), UI parts and focus ≥ 3:1, in every theme.
 4. Visible focus and full keyboard operation on web/desktop; never remove outlines without replacement.
 5. Native semantics first (real buttons/links/labels; platform accessibility APIs for custom controls).

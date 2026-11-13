@@ -10,6 +10,7 @@
 - **Frequent tasks** (most frequent first): {{…}}
 - **Pain points today**: {{…}}
 - **Special needs**: {{large targets, high contrast, offline, low literacy, screen reader…}}
+- **Device skill**: {{e.g. uses the phone all day for work → compact density; occasional or older users → comfortable or spacious}}
 - **Apps they use** (`config.yaml → apps[].users`): {{…}}
 
 ## Glossary (one term per concept)

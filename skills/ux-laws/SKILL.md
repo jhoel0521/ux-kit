@@ -48,7 +48,7 @@ Keep the other 4 laws in mind while building. They do not block, but they must b
 
 ### 3. Before delivering: final checklist
 
-Run this checklist and report the result to the user. "Mobile" includes web shown on phones (any responsive web unless the project says desktop-only). **Do not deliver while a BLOCKING item fails** (unless the project lowered that rule or approved an exception):
+Run this checklist and report the result to the user. "Mobile" means the app's `input` is `touch` or `both` (`config.yaml`; with `auto`, android/ios and web). A web declared `input: pointer` uses the desktop sizes. The sizes are **minimums**: size controls by the app's `density` (`.ux/knowledge/visual-system.md` §4b), never by inflating every control to the minimum and beyond. **Do not deliver while a BLOCKING item fails** (unless the project lowered that rule or approved an exception):
 
 <!-- ux-laws:checklist:start -->
 ```
@@ -69,6 +69,7 @@ SUGGESTIONS (report when they fail; they do not block)
 [ ] Aesthetic — at most 4 type sizes per screen (3 hierarchy levels + 1 small label), 2–3 font families    type-levels
 [ ] Aesthetic — consistent spacing system (multiples of 4 or 8)                         spacing-scale
 [ ] Aesthetic — limited, coherent color palette; one icon set; consistent radii        aesthetic-consistency
+[ ] Density — sizes follow the app's density; minimums are floors, not targets          oversized-ui
 ```
 <!-- ux-laws:checklist:end -->
 
@@ -101,7 +102,9 @@ The code examples in the references use React + Tailwind. For other stacks, `.ux
 | 24×24 px minimum | WCAG 2.2 SC 2.5.8 (AA) | Standard |
 | 44×44 on mobile | Apple HIG (44×44 pt); WCAG 2.2 SC 2.5.5 (AAA, 44×44 CSS px) | Standard |
 | 48×48 dp on Android | Material Design accessibility guidance | Standard |
-| 8 px between targets, 16 px between opposite actions | Common practice to prevent accidental taps; not found as a number in current Material pages | Team rule |
+| 8 px between targets | Material Design: touch targets of at least 48×48 dp with at least 8 dp between them | Standard |
+| 16 px between opposite actions | Team rule to keep Accept/Cancel and Delete/Edit apart | Team rule |
+| Density levels (compact / comfortable / spacious) | Material density steps of −4 dp per level; Carbon field heights 32 / 40 / 48 px | Standard, configurable per app |
 | ≤ 7 primary options, forms > 7 fields in steps | Hick–Hyman (1952) shows decision time grows with options; the number 7 is the team's limit (Miller 1956 is about memory, not visible options) | Team rule |
 | 5–9 items to remember, chunking | Miller (1956); later research suggests about 4 chunks (Cowan 2001) | Research |
 | ≤ 4 type sizes per screen | No study fixes a number. Ant Design keeps a system to 3–5 sizes; design guides commonly use 3 hierarchy levels and call 5–6 on one screen noise | Team rule, aligned with design systems |

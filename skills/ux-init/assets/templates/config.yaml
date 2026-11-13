@@ -10,6 +10,9 @@ project:
 
 platforms: []            # default for all apps: web | android | ios | macos | windows | linux | desktop | tv | watch
                          # ("desktop" = cross-platform desktop when the OS is not fixed, e.g. Tauri/Electron/Swing)
+input: auto              # how people operate the UI: touch | pointer | both | auto (touch for android/ios, pointer for
+                         # desktop apps, both for web). A web used only on computers is `pointer`: touch sizes don't apply.
+density: comfortable     # compact | comfortable | spacious — sizes in knowledge/visual-system.md §4b. Minimums are floors, not targets.
 
 apps: []                 # synced from code. Example:
 #  - name: backoffice
@@ -18,6 +21,8 @@ apps: []                 # synced from code. Example:
 #    platforms: [web]
 #    theme: apps/backoffice/src/styles/theme.css
 #    users: [warehouse-operator]          # profiles from standard/users.md (decision)
+#    input: pointer                       # overrides the top-level value for this app (e.g. an internal back office)
+#    density: compact
 #    overrides:                           # app-specific decisions
 #      accessibility: { level: AAA }
 

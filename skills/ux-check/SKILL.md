@@ -32,7 +32,7 @@ Fast and cheap by design: review only what changed, load only the knowledge need
 node .ux/scripts/scan.mjs --changed [base_ref] [app-paths…] --platform <web|mobile|desktop> [--include <glob>]… [--exclude <glob>]… --json
 ```
 (or `node .ux/scripts/scan.mjs <paths> …` for an explicit path). Run from the repo root so paths are repo-relative.
-- `--platform` only tunes touch-target severity. Use `mobile` if the app's platforms include android or ios, or if it is web that people use on phones (assume so for responsive web unless `config.yaml` says desktop-only); `desktop` for desktop apps; `web` only for desktop-only web. In monorepos with different apps changed, run once per group and pass that group's app paths (e.g. `--changed HEAD apps/web --platform web`).
+- `--platform` only tunes touch-target severity. Use the app's `input` (`config.yaml`, per app or top level): `touch` or `both` → `mobile`; `pointer` → `desktop`. With `input: auto` (the default): `mobile` for android/ios and for web, `desktop` for desktop apps. In monorepos with different apps changed, run once per group and pass that group's app paths (e.g. `--changed HEAD apps/web --platform web`).
 - In `--changed` mode only findings on **changed lines** are shown; the scanner reports how many pre-existing findings it hid. Put that number in the report (not the items) and suggest a full `ux-check <path>` baseline if it is high. Use `--all-lines` only if the user asks.
 - Every result is a **candidate**: open the code and confirm, reclassify or discard it. Final severity comes from `severity.md` + `config.yaml`, not from the scanner.
 
@@ -67,6 +67,7 @@ SUGGESTIONS (report when they fail; they do not block)
 [ ] Aesthetic — at most 4 type sizes per screen (3 hierarchy levels + 1 small label), 2–3 font families    type-levels
 [ ] Aesthetic — consistent spacing system (multiples of 4 or 8)                         spacing-scale
 [ ] Aesthetic — limited, coherent color palette; one icon set; consistent radii        aesthetic-consistency
+[ ] Density — sizes follow the app's density; minimums are floors, not targets          oversized-ui
 ```
 <!-- ux-laws:checklist:end -->
 

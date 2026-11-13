@@ -24,7 +24,7 @@ These are always **blocker**.
 ## Configurable rules (`.ux/config.yaml` → `severity:`)
 | Rule id | Default | What it covers |
 |---|---|---|
-| `touch-target-platform` | blocker | Fitts (ux-laws): interactive target below the touch minimum (44×44 on mobile, 48dp Android, 64px TV) but ≥ 24px. Applies to apps whose platforms include android/ios or touch devices, and to web apps used on phones (any responsive web unless `config.yaml` says it is desktop-only); on pointer-only desktop the 24px minimum of `wcag-a-aa` applies instead |
+| `touch-target-platform` | blocker | Fitts (ux-laws): interactive target below the touch minimum (44×44 on mobile, 48dp Android, 64px TV) but ≥ 24px. Applies when the app's `input` (`config.yaml`) is `touch` or `both` — with `auto`, to android/ios and to web; with `input: pointer` (desktop apps, a web used only on computers) the 24px minimum of `wcag-a-aa` applies instead |
 | `fitts-reach` | blocker | Fitts (ux-laws): primary CTA or primary navigation outside the bottom third on mobile, or critical controls stuck to the top edge |
 | `fitts-spacing` | blocker | Fitts (ux-laws): less than 8px between clickable elements on mobile (4px desktop), or less than 16px between opposite actions (Accept/Cancel, Delete/Edit) |
 | `hick-options` | blocker | Hick (ux-laws): more than 7 primary options visible at the same level on one screen, or more than 7 first-level navigation items |
@@ -47,6 +47,7 @@ These are always **blocker**.
 | `miller-chunks` | suggestion | Miller (ux-laws): lists/menus with more than 7 items without groups, long numbers without separators, flat long forms |
 | `peak-end` | suggestion | Peak-End (ux-laws): flow without a designed peak, end without confirmation + next step, error without a way out, generic success screen |
 | `type-levels` | suggestion | Aesthetic-usability (ux-laws): more than 4 type sizes on one screen, more than 2–3 font families in the project |
+| `oversized-ui` | minor | Density (ux-laws): controls, fields, padding or text clearly above the app's `density` sizes (`visual-system.md` §4b), e.g. 56px fields in a compact app or body text above the platform size without a reason. Minimums are floors, not targets |
 | `aesthetic-consistency` | suggestion | Aesthetic-usability (ux-laws): unlimited palette, mixed icon sets, mixed radii or shadows on components of the same type |
 
 The ux-laws rules are the team's standard: their numbers are project decisions, not universal laws. Cite them as "project rule (ux-laws)" with their id.

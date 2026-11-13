@@ -33,6 +33,19 @@
 - Safe areas: notch, Dynamic Island, gesture bars, Android edge-to-edge insets.
 - Density: data/back-office apps may be dense (rows 32–40px with pointer) if they keep 24px minimum and offer a comfortable mode.
 
+## 4b. Density (`config.yaml → density`, per app or top level)
+The size of a control is chosen by density; the touch and WCAG minimums are floors that density never goes below. A control can look smaller than its hit area (padding, `::before`, `minimumInteractiveComponentSize`, `contentShape`), so compact UIs stay accessible.
+
+| Density | Field / button height, pointer | Field / button height, touch | Gap between targets | Body text |
+|---|---|---|---|---|
+| compact | 32 px | 44 px (touch minimum) | 8 px touch · 4 px pointer | platform body size (web 16px; dense desktop data 14px) |
+| comfortable (default) | 40 px | 48 px | 8 px touch · 8 px pointer | platform body size |
+| spacious | 48 px | 56 px | 12–16 px | platform body size or one step up |
+
+Sources: Material Design density (each level reduces component height by 4 dp; touch targets ≥ 48×48 dp with ≥ 8 dp between them), Carbon field sizes (32 / 40 / 48 px). In the touch column, 44 px is the team minimum, 48 px is Material's default target and 56 px for spacious is a team value one step above.
+
+Choose with the users (`users.md → Device skill`): people who use the phone all day for work usually prefer compact; occasional users, older users or gloves need comfortable or spacious. Signs of an oversized UI (`oversized-ui`): every control at or above the spacious size in a compact or comfortable app, padding that doubles the control height, a mobile form where most of the screen is margins and the user scrolls several screens to finish.
+
 ## 5. Shape, elevation, borders, layers
 - Radii from tokens; same component, same radius; nested radii concentric (inner = outer − padding).
 - Few elevation levels (base, raised, overlay, modal). In dark mode elevation = lighter surfaces, not shadows.
